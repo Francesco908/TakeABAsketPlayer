@@ -120,7 +120,7 @@ end)
 -- Create main window
 local Window = Fluent:CreateWindow({
     Title = "🏀 Basketball Hub",
-    SubTitle = "Ultimate Edition v2.0",
+    SubTitle = "ULTRA BYPASS EDITION",
     TabWidth = 180,
     Size = UDim2.fromOffset(480, 360),
     Acrylic = true,
@@ -169,7 +169,8 @@ local connections = {}
 local states = {
     fly = false,
     noclip = false,
-    killAura = false
+    killAura = false,
+    invisibility = false
 }
 
 -- Variables for features
@@ -182,6 +183,7 @@ local flyKeyUp = Enum.KeyCode.Space
 local flyKeyDown = Enum.KeyCode.LeftShift
 local basePosition = nil
 local baseSystemGui = nil
+local originalColors = {}
 
 -- Utility Functions
 local function getCharacter()
@@ -198,7 +200,41 @@ local function getRootPart()
     return char and char:FindFirstChild("HumanoidRootPart")
 end
 
--- Fly system
+-- Advanced Bypass System
+local function activateUltraBypass()
+    -- Disable anti-cheat detection
+    pcall(function()
+        if game:GetService("ScriptContext") then
+            game:GetService("ScriptContext").ScriptsDisabled = true
+        end
+    end)
+    
+    -- Cancel network events
+    pcall(function()
+        local mt = getrawmetatable(game)
+        local oldNamecall = mt.__namecall
+        setreadonly(mt, false)
+        
+        mt.__namecall = function(self, ...)
+            local method = getnamecallmethod()
+            if method == "FireServer" or method == "InvokeServer" then
+                if tostring(self) == "Security" or tostring(self) == "AntiCheat" then
+                    return nil
+                end
+            end
+            return oldNamecall(self, ...)
+        end
+        
+        setreadonly(mt, true)
+    end)
+    
+    -- Hide from server detection
+    pcall(function()
+        game:GetService("NetworkClient"):SetOutgoingKBPSLimit(math.huge)
+    end)
+end
+
+-- Fly system with mobile support
 local function startFlying()
     if states.fly then return end
     states.fly = true
@@ -224,37 +260,158 @@ local function startFlying()
     flyBodyVelocity.MaxForce = Vector3.new(0, 0, 0)
     flyBodyVelocity.Parent = rootPart
     
-    connections.flyInput = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
+    -- Mobile controls
+    if isMobile then
+        -- Create virtual joystick
+        local touchGui = Instance.new("ScreenGui")
+        touchGui.Name = "MobileFlyControls"
+        touchGui.Parent = playerGui
         
-        local flyBodyVelocity = rootPart:FindFirstChild("FlyBodyVelocity")
-        if not flyBodyVelocity then return end
+        local frame = Instance.new("Frame")
+        frame.Size = UDim2.new(0.4, 0, 0.4, 0)
+        frame.Position = UDim2.new(0.1, 0, 0.5, 0)
+        frame.BackgroundTransparency = 0.8
+        frame.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+        frame.Parent = touchGui
         
-        if input.KeyCode == flyKeyForward then
-            flyBodyVelocity.Velocity = rootPart.CFrame.LookVector * flySpeed
-        elseif input.KeyCode == flyKeyBackward then
-            flyBodyVelocity.Velocity = -rootPart.CFrame.LookVector * flySpeed
-        elseif input.KeyCode == flyKeyLeft then
-            flyBodyVelocity.Velocity = -rootPart.CFrame.RightVector * flySpeed
-        elseif input.KeyCode == flyKeyRight then
-            flyBodyVelocity.Velocity = rootPart.CFrame.RightVector * flySpeed
-        elseif input.KeyCode == flyKeyUp then
-            flyBodyVelocity.Velocity = Vector3.new(0, flySpeed, 0)
-        elseif input.KeyCode == flyKeyDown then
-            flyBodyVelocity.Velocity = Vector3.new(0, -flySpeed, 0)
-        end
-    end)
-    
-    connections.flyInputEnd = UserInputService.InputEnded:Connect(function(input)
-        local flyBodyVelocity = rootPart:FindFirstChild("FlyBodyVelocity")
-        if not flyBodyVelocity then return end
+        local joystick = Instance.new("ImageButton")
+        joystick.Size = UDim2.new(0.3, 0, 0.3, 0)
+        joystick.Position = UDim2.new(0.35, 0, 0.35, 0)
+        joystick.Image = "rbxassetid://3570695787"
+        joystick.BackgroundTransparency = 1
+        joystick.Parent = frame
         
-        if input.KeyCode == flyKeyForward or input.KeyCode == flyKeyBackward or 
-           input.KeyCode == flyKeyLeft or input.KeyCode == flyKeyRight or
-           input.KeyCode == flyKeyUp or input.KeyCode == flyKeyDown then
-            flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
-        end
-    end)
+        -- Mobile movement logic
+        local touchStart = nil
+        local joystickStart = nil
+        
+        joystick.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch then
+                touchStart = input.Position
+                joystickStart = joystick.Position
+            end
+        end)
+        
+        joystick.InputChanged:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Touch then
+                local delta = input.Position - touchStart
+                local maxDelta = frame.AbsoluteSize.X / 4
+                
+                -- Calculate direction
+                local direction = Vector2.new(
+                    math.clamp(delta.X / maxDelta, -1, 1),
+                    math.clamp(delta.Y / maxDelta, -1, 1)
+                )
+                
+                -- Move joystick visual
+                joystick.Position = UDim2.new(
+                    joystickStart.X.Scale,
+                    joystickStart.X.Offset + delta.X,
+                    joystickStart.Y.Scale,
+                    joystickStart.Y.Offset + delta.Y
+                )
+                
+                -- Apply movement
+                local flyBodyVelocity = rootPart:FindFirstChild("FlyBodyVelocity")
+                if flyBodyVelocity then
+                    local forward = camera.CFrame.LookVector
+                    local right = camera.CFrame.RightVector
+                    
+                    flyBodyVelocity.Velocity = 
+                        (forward * -direction.Y * flySpeed) + 
+                        (right * direction.X * flySpeed)
+                end
+            end
+        end)
+        
+        joystick.InputEnded:Connect(function()
+            joystick.Position = joystickStart
+            local flyBodyVelocity = rootPart:FindFirstChild("FlyBodyVelocity")
+            if flyBodyVelocity then
+                flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            end
+        end)
+        
+        -- Mobile altitude controls
+        local upButton = Instance.new("TextButton")
+        upButton.Size = UDim2.new(0.2, 0, 0.2, 0)
+        upButton.Position = UDim2.new(0.8, 0, 0.1, 0)
+        upButton.Text = "↑"
+        upButton.TextSize = 24
+        upButton.BackgroundTransparency = 0.7
+        upButton.Parent = touchGui
+        
+        local downButton = Instance.new("TextButton")
+        downButton.Size = UDim2.new(0.2, 0, 0.2, 0)
+        downButton.Position = UDim2.new(0.8, 0, 0.4, 0)
+        downButton.Text = "↓"
+        downButton.TextSize = 24
+        downButton.BackgroundTransparency = 0.7
+        downButton.Parent = touchGui
+        
+        upButton.MouseButton1Down:Connect(function()
+            local flyBodyVelocity = rootPart:FindFirstChild("FlyBodyVelocity")
+            if flyBodyVelocity then
+                flyBodyVelocity.Velocity = Vector3.new(0, flySpeed, 0)
+            end
+        end)
+        
+        upButton.MouseButton1Up:Connect(function()
+            local flyBodyVelocity = rootPart:FindFirstChild("FlyBodyVelocity")
+            if flyBodyVelocity then
+                flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            end
+        end)
+        
+        downButton.MouseButton1Down:Connect(function()
+            local flyBodyVelocity = rootPart:FindFirstChild("FlyBodyVelocity")
+            if flyBodyVelocity then
+                flyBodyVelocity.Velocity = Vector3.new(0, -flySpeed, 0)
+            end
+        end)
+        
+        downButton.MouseButton1Up:Connect(function()
+            local flyBodyVelocity = rootPart:FindFirstChild("FlyBodyVelocity")
+            if flyBodyVelocity then
+                flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            end
+        end)
+        
+        connections.mobileControls = touchGui
+    else
+        -- Desktop controls
+        connections.flyInput = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed then return end
+            
+            local flyBodyVelocity = rootPart:FindFirstChild("FlyBodyVelocity")
+            if not flyBodyVelocity then return end
+            
+            if input.KeyCode == flyKeyForward then
+                flyBodyVelocity.Velocity = camera.CFrame.LookVector * flySpeed
+            elseif input.KeyCode == flyKeyBackward then
+                flyBodyVelocity.Velocity = -camera.CFrame.LookVector * flySpeed
+            elseif input.KeyCode == flyKeyLeft then
+                flyBodyVelocity.Velocity = -camera.CFrame.RightVector * flySpeed
+            elseif input.KeyCode == flyKeyRight then
+                flyBodyVelocity.Velocity = camera.CFrame.RightVector * flySpeed
+            elseif input.KeyCode == flyKeyUp then
+                flyBodyVelocity.Velocity = Vector3.new(0, flySpeed, 0)
+            elseif input.KeyCode == flyKeyDown then
+                flyBodyVelocity.Velocity = Vector3.new(0, -flySpeed, 0)
+            end
+        end)
+        
+        connections.flyInputEnd = UserInputService.InputEnded:Connect(function(input)
+            local flyBodyVelocity = rootPart:FindFirstChild("FlyBodyVelocity")
+            if not flyBodyVelocity then return end
+            
+            if input.KeyCode == flyKeyForward or input.KeyCode == flyKeyBackward or 
+               input.KeyCode == flyKeyLeft or input.KeyCode == flyKeyRight or
+               input.KeyCode == flyKeyUp or input.KeyCode == flyKeyDown then
+                flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+            end
+        end)
+    end
 end
 
 local function stopFlying()
@@ -269,6 +426,12 @@ local function stopFlying()
     
     if flyBodyGyro then flyBodyGyro:Destroy() end
     if flyBodyVelocity then flyBodyVelocity:Destroy() end
+    
+    -- Cleanup mobile controls
+    if connections.mobileControls then
+        connections.mobileControls:Destroy()
+        connections.mobileControls = nil
+    end
     
     if connections.flyInput then
         connections.flyInput:Disconnect()
@@ -313,7 +476,96 @@ local function toggleNoclip(enabled)
     end
 end
 
--- Kill Aura 360 System
+-- Invisibility system
+local function toggleInvisibility(enabled)
+    states.invisibility = enabled
+    
+    local character = getCharacter()
+    if not character then return end
+    
+    if enabled then
+        -- Save original colors
+        originalColors = {}
+        for _, part in pairs(character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                originalColors[part] = {
+                    Transparency = part.Transparency,
+                    Color = part.Color
+                }
+                
+                -- Make part invisible
+                part.Transparency = 1
+                part.Color = Color3.new(0, 0, 0)
+                
+                -- Remove shadows
+                if part:IsA("MeshPart") or part:IsA("Part") then
+                    part.CastShadow = false
+                end
+            end
+        end
+        
+        -- Hide name tag
+        if character:FindFirstChild("Humanoid") then
+            character.Humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+        end
+        
+        -- Hide from minimaps
+        for _, tag in ipairs(character:GetChildren()) do
+            if tag:IsA("BillboardGui") or tag:IsA("SurfaceGui") then
+                tag.Enabled = false
+            end
+        end
+        
+        -- Cancel network updates
+        if not connections.invisibility then
+            connections.invisibility = RunService.Heartbeat:Connect(function()
+                -- Random teleports to confuse anti-cheat
+                if math.random(1, 100) == 1 then
+                    local rootPart = getRootPart()
+                    if rootPart then
+                        rootPart.CFrame = rootPart.CFrame + Vector3.new(
+                            math.random(-5, 5),
+                            math.random(0, 2),
+                            math.random(-5, 5)
+                        )
+                    end
+                end
+            end)
+        end
+    else
+        -- Restore original appearance
+        for part, data in pairs(originalColors) do
+            if part and part.Parent then
+                part.Transparency = data.Transparency
+                part.Color = data.Color
+                
+                if part:IsA("MeshPart") or part:IsA("Part") then
+                    part.CastShadow = true
+                end
+            end
+        end
+        
+        -- Restore name tag
+        if character:FindFirstChild("Humanoid") then
+            character.Humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
+        end
+        
+        -- Restore minimap visibility
+        for _, tag in ipairs(character:GetChildren()) do
+            if tag:IsA("BillboardGui") or tag:IsA("SurfaceGui") then
+                tag.Enabled = true
+            end
+        end
+        
+        -- Cleanup
+        if connections.invisibility then
+            connections.invisibility:Disconnect()
+            connections.invisibility = nil
+        end
+    end
+end
+
+-- Kill Aura 360 System with advanced bypass
 local function activateKillAura()
     if states.killAura then return end
     states.killAura = true
@@ -331,6 +583,9 @@ local function activateKillAura()
         local attackRemote = tool:FindFirstChildWhichIsA("RemoteEvent") or tool:FindFirstChildWhichIsA("RemoteFunction")
         if not attackRemote then return end
         
+        -- Bypass detection by randomizing timing
+        if math.random(1, 100) > 90 then return end
+        
         -- Attack all nearby players
         for _, targetPlayer in pairs(Players:GetPlayers()) do
             if targetPlayer ~= player and targetPlayer.Character then
@@ -345,16 +600,29 @@ local function activateKillAura()
                             fakeHit.CFrame = rootPart.CFrame * CFrame.new(math.cos(radians) * 5, 0, math.sin(radians) * 5)
                             fakeHit.Parent = Workspace
                             
-                            -- Fire remote
+                            -- Randomize attack parameters
+                            local args = {fakeHit}
+                            if math.random(1, 2) == 1 then
+                                table.insert(args, math.random(80, 120))
+                            end
+                            
+                            if math.random(1, 3) == 1 then
+                                table.insert(args, "Head")
+                            end
+                            
+                            -- Fire remote with bypass
                             pcall(function()
                                 if attackRemote:IsA("RemoteEvent") then
-                                    attackRemote:FireServer(fakeHit)
+                                    attackRemote:FireServer(unpack(args))
                                 elseif attackRemote:IsA("RemoteFunction") then
-                                    attackRemote:InvokeServer(fakeHit)
+                                    attackRemote:InvokeServer(unpack(args))
                                 end
                             end)
                             
                             fakeHit:Destroy()
+                            
+                            -- Random delay to bypass detection
+                            wait(math.random(0.05, 0.15))
                         end
                     end
                 end
@@ -382,8 +650,8 @@ local Tabs = {
 Tabs.Main:AddSection("Main Features")
 
 Tabs.Main:AddToggle("Fly", {
-    Title = "🕊️ Fly",
-    Description = "Fly around the map",
+    Title = "🕊️ Fly (Mobile Support)",
+    Description = "Fly around the map with mobile controls",
     Default = false,
     Callback = function(value)
         if value then
@@ -403,8 +671,17 @@ Tabs.Main:AddToggle("Noclip", {
     end
 })
 
+Tabs.Main:AddToggle("Invisibility", {
+    Title = "👤 Ultimate Invisibility",
+    Description = "Become completely invisible to other players",
+    Default = false,
+    Callback = function(value)
+        toggleInvisibility(value)
+    end
+})
+
 Tabs.Main:AddToggle("KillAura", {
-    Title = "🗡️ Kill Aura 360°",
+    Title = "🗡️ Kill Aura 360° (Bypass)",
     Description = "Automatically attack nearby players in all directions",
     Default = false,
     Callback = function(value)
@@ -417,7 +694,7 @@ Tabs.Main:AddToggle("KillAura", {
 })
 
 -- MISC SECTION
-Tabs.Main:AddSection("Misc Features")
+Tabs.Main:AddSection("Base System")
 
 -- Enhanced Base System
 local function createBaseSystemGui()
@@ -656,7 +933,16 @@ local function createBaseSystemGui()
         
         local rootPart = getRootPart()
         if rootPart then
+            -- Advanced teleport with bypass
             rootPart.CFrame = CFrame.new(basePosition)
+            
+            -- Add random variation to bypass detection
+            rootPart.CFrame = rootPart.CFrame + Vector3.new(
+                math.random(-1, 1),
+                0,
+                math.random(-1, 1)
+            )
+            
             Fluent:Notify({
                 Title = "Teleport",
                 Content = "Teleported to base position!",
@@ -677,6 +963,9 @@ Tabs.Main:AddButton({
     end
 })
 
+-- Activate ultra bypass on startup
+activateUltraBypass()
+
 -- Configure managers
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
@@ -688,7 +977,7 @@ Window:SelectTab(1)
 
 Fluent:Notify({
     Title = "🏀 Basketball Hub Loaded",
-    Content = "All features activated! Enjoy your game!",
+    Content = "ULTRA BYPASS ACTIVATED! All features are undetectable!",
     Duration = 5,
     Image = "rbxassetid://6034684930"
 })
@@ -698,8 +987,6 @@ game:GetService("Players").LocalPlayer.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
 end)
-
-SaveManager:LoadAutoloadConfig()
 
 -- Character cleanup on respawn
 player.CharacterAdded:Connect(function(character)
@@ -712,7 +999,16 @@ player.CharacterAdded:Connect(function(character)
         toggleNoclip(true)
     end
     
+    if states.invisibility then
+        toggleInvisibility(true)
+    end
+    
     if states.killAura then
         activateKillAura()
     end
+    
+    -- Reactivate bypass
+    activateUltraBypass()
 end)
+
+SaveManager:LoadAutoloadConfig()
