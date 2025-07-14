@@ -1,83 +1,87 @@
 -- Loader for Take a Basket Player Script with Floating Button
 
--- Persistent GUI button based on file source
+-- Persistent GUI button based on original working source
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
+local UIS = game:GetService("UserInputService")
 
-local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+local Player = Players.LocalPlayer
+local PlayerGui = Player:WaitForChild("PlayerGui")
 
-local persistentGui = Instance.new("ScreenGui")
-persistentGui.Name = "FluentPersistentButton"
-persistentGui.Parent = playerGui
-persistentGui.ResetOnSpawn = false
-persistentGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-persistentGui.Enabled = true
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "LoaderGUI"
+ScreenGui.Parent = PlayerGui
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.ResetOnSpawn = false
 
-local imageButton = Instance.new("ImageButton")
-imageButton.Name = "PersistentControl"
-imageButton.Size = UDim2.fromOffset(70, 70)
-imageButton.Position = UDim2.new(0, 20, 0.5, -35)
-imageButton.AnchorPoint = Vector2.new(0, 0.5)
-imageButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-imageButton.BorderSizePixel = 0
-imageButton.Image = "rbxassetid://6034684930"
-imageButton.ScaleType = Enum.ScaleType.Fit
-imageButton.BackgroundTransparency = 0.5
-imageButton.ImageTransparency = 0.2
-imageButton.Parent = persistentGui
+local OpenButton = Instance.new("ImageButton")
+OpenButton.Name = "OpenButton"
+OpenButton.Parent = ScreenGui
+OpenButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+OpenButton.BorderSizePixel = 0
+OpenButton.Position = UDim2.new(0, 20, 0.5, -35)
+OpenButton.Size = UDim2.new(0, 70, 0, 70)
+OpenButton.Image = "rbxassetid://6034684930"
+OpenButton.BackgroundTransparency = 0.3
+OpenButton.ImageTransparency = 0.1
+OpenButton.AutoButtonColor = true
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0.3, 0)
-corner.Parent = imageButton
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0.3, 0)
+UICorner.Parent = OpenButton
 
-local dragging = false
-local dragStart, startPos
+-- Draggable button logic
+local dragging, dragInput, dragStart, startPos
 
-local function onDragStart(input)
-    dragging = true
-    dragStart = input.Position
-    startPos = imageButton.Position
+local function update(input)
+    local delta = input.Position - dragStart
+    OpenButton.Position = UDim2.new(
+        startPos.X.Scale,
+        startPos.X.Offset + delta.X,
+        startPos.Y.Scale,
+        startPos.Y.Offset + delta.Y
+    )
 end
 
-local function onDragEnd()
-    dragging = false
-end
+OpenButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = OpenButton.Position
 
-local function onDragMove(input)
-    if dragging then
-        local delta = input.Position - dragStart
-        imageButton.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
-        )
-    end
-end
-
-imageButton.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        onDragStart(input)
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
     end
 end)
 
-imageButton.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        onDragEnd()
-    end
-end)
-
-imageButton.InputChanged:Connect(function(input)
+OpenButton.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        onDragMove(input)
+        dragInput = input
     end
 end)
 
--- Load Fluent GUI from GitHub on click
+UIS.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        update(input)
+    end
+end)
+
+-- Rotation for visual effect
+spawn(function()
+    local rotation = 0
+    while OpenButton and OpenButton.Parent do
+        rotation = rotation + 1.2
+        OpenButton.Rotation = rotation
+        RunService.RenderStepped:Wait()
+    end
+end)
+
+-- Load script from GitHub
 local guiLoaded = false
-imageButton.MouseButton1Click:Connect(function()
+OpenButton.MouseButton1Click:Connect(function()
     if guiLoaded then return end
     guiLoaded = true
 
@@ -90,15 +94,5 @@ imageButton.MouseButton1Click:Connect(function()
         warn("[TakeABasketPlayer] Failed to load script from GitHub:", result)
     else
         print("[TakeABasketPlayer] Loaded successfully from:", url)
-    end
-end)
-
--- Rotate imageButton for visual effect
-spawn(function()
-    local rotation = 0
-    while imageButton and imageButton.Parent do
-        rotation = rotation + 2
-        imageButton.Rotation = rotation
-        RunService.Heartbeat:Wait()
     end
 end)
