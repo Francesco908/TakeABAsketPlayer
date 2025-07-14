@@ -1,15 +1,90 @@
--- Loader for Take a Basket Player Script with Floating Button
-
--- Services
+-- Servizi
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
-local StarterGui = game:GetService("StarterGui")
-
 local Player = Players.LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 
--- Create ScreenGui for the loader button
+-- Caricamento della libreria Fluent
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+-- Creazione della finestra Fluent
+local Window = Fluent:CreateWindow({
+    Title = "Take a Basket Player",
+    SubTitle = "Loader",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local Tabs = {
+    Main = Window:AddTab({ Title = "Main", Icon = "home" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+-- Istruzioni per l'utente
+Tabs.Main:AddParagraph({
+    Title = "Istruzioni",
+    Content = "Clicca il pulsante 'Carica Script' per caricare lo script da GitHub. Se fallisce, puoi incollare il codice dello script nel campo qui sotto e premere Invio per eseguirlo."
+})
+
+-- Pulsante per caricare lo script da GitHub
+Tabs.Main:AddButton({
+    Title = "Carica Script",
+    Description = "Carica lo script Take a Basket Player da GitHub",
+    Callback = function()
+        local url = "https://raw.githubusercontent.com/Francesco908/TakeABAsketPlayer/main/BASKET.lua"
+        local success, result = pcall(function()
+            return loadstring(game:HttpGet(url))()
+        end)
+        if success then
+            Fluent:Notify({
+                Title = "Successo",
+                Content = "Script caricato con successo!",
+                Duration = 5
+            })
+        else
+            Fluent:Notify({
+                Title = "Errore",
+                Content = "Impossibile caricare lo script: " .. tostring(result),
+                Duration = 5
+            })
+        end
+    end
+})
+
+-- Campo di input per incollare lo script manualmente
+Tabs.Main:AddInput("ScriptInput", {
+    Title = "Incolla Script",
+    Default = "",
+    Placeholder = "Incolla qui il codice dello script",
+    Numeric = false,
+    Finished = true,
+    Callback = function(value)
+        local success, result = pcall(function()
+            return loadstring(value)()
+        end)
+        if success then
+            Fluent:Notify({
+                Title = "Successo",
+                Content = "Script eseguito con successo!",
+                Duration = 5
+            })
+        else
+            Fluent:Notify({
+                Title = "Errore",
+                Content = "Impossibile eseguire lo script: " .. tostring(result),
+                Duration = 5
+            })
+        end
+    end
+})
+
+-- Creazione del pulsante flottante
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "LoaderGUI"
 ScreenGui.Parent = PlayerGui
@@ -32,7 +107,7 @@ local UICorner = Instance.new("UICorner")
 UICorner.CornerRadius = UDim.new(0.3, 0)
 UICorner.Parent = OpenButton
 
--- Draggable button logic
+-- Logica per rendere il pulsante trascinabile
 local dragging, dragInput, dragStart, startPos
 
 local function update(input)
@@ -50,7 +125,6 @@ OpenButton.InputBegan:Connect(function(input)
         dragging = true
         dragStart = input.Position
         startPos = OpenButton.Position
-
         input.Changed:Connect(function()
             if input.UserInputState == Enum.UserInputState.End then
                 dragging = false
@@ -71,70 +145,37 @@ UIS.InputChanged:Connect(function(input)
     end
 end)
 
--- Rotation for visual effect
+-- Rotazione per effetto visivo
 spawn(function()
     local rotation = 0
     while OpenButton and OpenButton.Parent do
-        rotation = rotation + 1.2
+        rotation = (rotation + 1.2) % 360
         OpenButton.Rotation = rotation
         RunService.RenderStepped:Wait()
     end
 end)
 
--- Load script from GitHub and ensure GUI visibility
-local guiLoaded = false
+-- Attivazione/disattivazione della finestra Fluent
 OpenButton.MouseButton1Click:Connect(function()
-    if guiLoaded then return end
-    guiLoaded = true
-
-    -- Record existing ScreenGuis before loading
-    local existingGuis = {}
-    for _, gui in pairs(PlayerGui:GetChildren()) do
-        if gui:IsA("ScreenGui") then
-            table.insert(existingGuis, gui)
-        end
-    end
-
-    -- Load the script
-    local url = "https://raw.githubusercontent.com/Francesco908/TakeABAsketPlayer/main/BASKET.lua"
-    local success, result = pcall(function()
-        return loadstring(game:HttpGet(url))()
-    end)
-
-    if not success then
-        warn("[TakeABasketPlayer] Failed to load script from GitHub:", result)
-        StarterGui:SetCore("SendNotification", {
-            Title = "TakeABasketPlayer",
-            Text = "Failed to load script: " .. tostring(result),
-            Duration = 5
-        })
+    if Window.ScreenGui then
+        Window.ScreenGui.Enabled = not Window.ScreenGui.Enabled
     else
-        print("[TakeABasketPlayer] Loaded successfully from:", url)
-        -- Wait briefly for the GUI to be created
-        wait(0.5)
-        -- Find and adjust new ScreenGuis
-        local newGuis = 0
+        -- Se Window.ScreenGui non è accessibile, cerca la ScreenGui di Fluent
         for _, gui in pairs(PlayerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and not table.find(existingGuis, gui) then
-                gui.DisplayOrder = 1000 -- Bring to front
-                gui.Enabled = true -- Ensure it’s visible
-                newGuis = newGuis + 1
+            if gui:IsA("ScreenGui") and gui.Name:find("Fluent") then
+                gui.Enabled = not gui.Enabled
+                break
             end
-        end
-        if newGuis > 0 then
-            print("[TakeABasketPlayer] Set DisplayOrder for " .. newGuis .. " new ScreenGui(s)")
-            StarterGui:SetCore("SendNotification", {
-                Title = "TakeABasketPlayer",
-                Text = "GUI loaded and brought to front!",
-                Duration = 5
-            })
-        else
-            print("[TakeABasketPlayer] No new ScreenGui found after loading")
-            StarterGui:SetCore("SendNotification", {
-                Title = "TakeABasketPlayer",
-                Text = "No new GUI detected after loading script",
-                Duration = 5
-            })
         end
     end
 end)
+
+-- Seleziona la prima scheda
+Window:SelectTab(1)
+
+-- Notifica di inizializzazione
+Fluent:Notify({
+    Title = "Take a Basket Player",
+    Content = "Il loader è stato inizializzato.",
+    Duration = 5
+})
