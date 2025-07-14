@@ -8,14 +8,23 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local StarterGui = game:GetService("StarterGui")
+local VirtualUser = game:GetService("VirtualUser")
+local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
 
 -- Variables
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local camera = Workspace.CurrentCamera
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
 -- Create persistent image (always visible)
 local persistentGui = Instance.new("ScreenGui")
-persistentGui.Name = "FluentPersistentButton"
+persistentGui.Name = "BasketballHubButton"
 persistentGui.Parent = playerGui
 persistentGui.ResetOnSpawn = false
 persistentGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -108,10 +117,10 @@ imageButton.InputChanged:Connect(function(input)
     end
 end)
 
--- Create main window optimized for mobile with larger horizontal size
+-- Create main window
 local Window = Fluent:CreateWindow({
-    Title = "💧 Water HUB",
-    SubTitle = "Take a Basket Player Edition",
+    Title = "🏀 Basketball Hub",
+    SubTitle = "Ultimate Edition v2.0",
     TabWidth = 180,
     Size = UDim2.fromOffset(480, 360),
     Acrylic = true,
@@ -155,151 +164,555 @@ end
 
 UserInputService.InputBegan:Connect(onKeyDown)
 
--- Create tabs
-local Tabs = {
-    Main = Window:AddTab({ Title = "🛡️ Main", Icon = "shield" }),
-    Visual = Window:AddTab({ Title = "👁️ Visual", Icon = "eye" }),
-    Misc = Window:AddTab({ Title = "🔧 Misc", Icon = "settings" }),
-    Server = Window:AddTab({ Title = "🌐 Server", Icon = "globe" })
+-- State management
+local connections = {}
+local states = {
+    fly = false,
+    noclip = false,
+    killAura = false
 }
 
--- MAIN TAB
-Tabs.Main:AddToggle("SpeedBoost", {
-    Title = "⚡ Speed Boost",
-    Description = "Increases movement speed",
-    Default = false,
-    Callback = function(value)
-        if player.Character and player.Character:FindFirstChild("Humanoid") then
-            if value then
-                player.Character.Humanoid.WalkSpeed = 32
-            else
-                player.Character.Humanoid.WalkSpeed = 16
+-- Variables for features
+local flySpeed = 50
+local flyKeyForward = Enum.KeyCode.W
+local flyKeyBackward = Enum.KeyCode.S
+local flyKeyLeft = Enum.KeyCode.A
+local flyKeyRight = Enum.KeyCode.D
+local flyKeyUp = Enum.KeyCode.Space
+local flyKeyDown = Enum.KeyCode.LeftShift
+local basePosition = nil
+local baseSystemGui = nil
+
+-- Utility Functions
+local function getCharacter()
+    return player.Character
+end
+
+local function getHumanoid()
+    local char = getCharacter()
+    return char and char:FindFirstChildOfClass("Humanoid")
+end
+
+local function getRootPart()
+    local char = getCharacter()
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+-- Fly system
+local function startFlying()
+    if states.fly then return end
+    states.fly = true
+    
+    local character = getCharacter()
+    local humanoid = getHumanoid()
+    local rootPart = getRootPart()
+    
+    if not character or not humanoid or not rootPart then return end
+    
+    -- Create flying parts
+    local flyBodyGyro = Instance.new("BodyGyro")
+    flyBodyGyro.Name = "FlyBodyGyro"
+    flyBodyGyro.P = 10000
+    flyBodyGyro.D = 1000
+    flyBodyGyro.MaxTorque = Vector3.new(100000, 100000, 100000)
+    flyBodyGyro.CFrame = rootPart.CFrame
+    flyBodyGyro.Parent = rootPart
+    
+    local flyBodyVelocity = Instance.new("BodyVelocity")
+    flyBodyVelocity.Name = "FlyBodyVelocity"
+    flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    flyBodyVelocity.MaxForce = Vector3.new(0, 0, 0)
+    flyBodyVelocity.Parent = rootPart
+    
+    connections.flyInput = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        
+        local flyBodyVelocity = rootPart:FindFirstChild("FlyBodyVelocity")
+        if not flyBodyVelocity then return end
+        
+        if input.KeyCode == flyKeyForward then
+            flyBodyVelocity.Velocity = rootPart.CFrame.LookVector * flySpeed
+        elseif input.KeyCode == flyKeyBackward then
+            flyBodyVelocity.Velocity = -rootPart.CFrame.LookVector * flySpeed
+        elseif input.KeyCode == flyKeyLeft then
+            flyBodyVelocity.Velocity = -rootPart.CFrame.RightVector * flySpeed
+        elseif input.KeyCode == flyKeyRight then
+            flyBodyVelocity.Velocity = rootPart.CFrame.RightVector * flySpeed
+        elseif input.KeyCode == flyKeyUp then
+            flyBodyVelocity.Velocity = Vector3.new(0, flySpeed, 0)
+        elseif input.KeyCode == flyKeyDown then
+            flyBodyVelocity.Velocity = Vector3.new(0, -flySpeed, 0)
+        end
+    end)
+    
+    connections.flyInputEnd = UserInputService.InputEnded:Connect(function(input)
+        local flyBodyVelocity = rootPart:FindFirstChild("FlyBodyVelocity")
+        if not flyBodyVelocity then return end
+        
+        if input.KeyCode == flyKeyForward or input.KeyCode == flyKeyBackward or 
+           input.KeyCode == flyKeyLeft or input.KeyCode == flyKeyRight or
+           input.KeyCode == flyKeyUp or input.KeyCode == flyKeyDown then
+            flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        end
+    end)
+end
+
+local function stopFlying()
+    if not states.fly then return end
+    states.fly = false
+    
+    local rootPart = getRootPart()
+    if not rootPart then return end
+    
+    local flyBodyGyro = rootPart:FindFirstChild("FlyBodyGyro")
+    local flyBodyVelocity = rootPart:FindFirstChild("FlyBodyVelocity")
+    
+    if flyBodyGyro then flyBodyGyro:Destroy() end
+    if flyBodyVelocity then flyBodyVelocity:Destroy() end
+    
+    if connections.flyInput then
+        connections.flyInput:Disconnect()
+        connections.flyInput = nil
+    end
+    
+    if connections.flyInputEnd then
+        connections.flyInputEnd:Disconnect()
+        connections.flyInputEnd = nil
+    end
+end
+
+-- Noclip system
+local function toggleNoclip(enabled)
+    states.noclip = enabled
+    
+    if connections.noclip then
+        connections.noclip:Disconnect()
+        connections.noclip = nil
+    end
+    
+    if enabled then
+        connections.noclip = RunService.Stepped:Connect(function()
+            local character = getCharacter()
+            if character then
+                for _, part in pairs(character:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+    else
+        local character = getCharacter()
+        if character then
+            for _, part in pairs(character:GetDescendants()) do
+                if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                    part.CanCollide = true
+                end
             end
         end
     end
-})
+end
 
-Tabs.Main:AddToggle("AntiTrap", {
-    Title = "🚫 Anti Trap",
-    Description = "Prevents being trapped by other players",
-    Default = false
-})
+-- Kill Aura 360 System
+local function activateKillAura()
+    if states.killAura then return end
+    states.killAura = true
+    
+    connections.killAura = RunService.Heartbeat:Connect(function()
+        local character = getCharacter()
+        local rootPart = getRootPart()
+        if not character or not rootPart then return end
+        
+        -- Find equipped tool
+        local tool = character:FindFirstChildOfClass("Tool")
+        if not tool then return end
+        
+        -- Find attack function in tool
+        local attackRemote = tool:FindFirstChildWhichIsA("RemoteEvent") or tool:FindFirstChildWhichIsA("RemoteFunction")
+        if not attackRemote then return end
+        
+        -- Attack all nearby players
+        for _, targetPlayer in pairs(Players:GetPlayers()) do
+            if targetPlayer ~= player and targetPlayer.Character then
+                local targetRoot = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if targetRoot then
+                    local distance = (rootPart.Position - targetRoot.Position).Magnitude
+                    if distance <= 25 then
+                        -- Attack in all directions
+                        for angle = 0, 315, 45 do
+                            local radians = math.rad(angle)
+                            local fakeHit = Instance.new("Part")
+                            fakeHit.CFrame = rootPart.CFrame * CFrame.new(math.cos(radians) * 5, 0, math.sin(radians) * 5)
+                            fakeHit.Parent = Workspace
+                            
+                            -- Fire remote
+                            pcall(function()
+                                if attackRemote:IsA("RemoteEvent") then
+                                    attackRemote:FireServer(fakeHit)
+                                elseif attackRemote:IsA("RemoteFunction") then
+                                    attackRemote:InvokeServer(fakeHit)
+                                end
+                            end)
+                            
+                            fakeHit:Destroy()
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
 
-Tabs.Main:AddToggle("GodMode", {
-    Title = "🛡️ God Mode",
-    Description = "Complete invincibility",
-    Default = false
+local function deactivateKillAura()
+    if not states.killAura then return end
+    states.killAura = false
+    
+    if connections.killAura then
+        connections.killAura:Disconnect()
+        connections.killAura = nil
+    end
+end
+
+-- Create a single tab
+local Tabs = {
+    Main = Window:AddTab({ Title = "🏀 Basketball Hub", Icon = "shield" })
+}
+
+-- MAIN SECTION
+Tabs.Main:AddSection("Main Features")
+
+Tabs.Main:AddToggle("Fly", {
+    Title = "🕊️ Fly",
+    Description = "Fly around the map",
+    Default = false,
+    Callback = function(value)
+        if value then
+            startFlying()
+        else
+            stopFlying()
+        end
+    end
 })
 
 Tabs.Main:AddToggle("Noclip", {
     Title = "👻 Noclip",
     Description = "Walk through walls",
-    Default = false
-})
-
--- VISUAL TAB
-Tabs.Visual:AddToggle("ESPPlayers", {
-    Title = "👥 Player Highlights",
-    Description = "Highlight all players",
-    Default = false
-})
-
-Tabs.Visual:AddToggle("ESPBox", {
-    Title = "📦 ESP Box",
-    Description = "Show boxes around players",
-    Default = false
-})
-
--- MISC TAB
-Tabs.Misc:AddSection("📍 Base System")
-
-Tabs.Misc:AddButton({
-    Title = "📍 Set Base Position",
-    Description = "Set your current position as base",
-    Callback = function()
-        Fluent:Notify({
-            Title = "Base System",
-            Content = "Base position set!",
-            Duration = 3
-        })
+    Default = false,
+    Callback = function(value)
+        toggleNoclip(value)
     end
 })
 
-Tabs.Misc:AddButton({
-    Title = "🚀 Teleport to Base",
-    Description = "Return to your saved base position",
-    Callback = function()
-        Fluent:Notify({
-            Title = "Base System",
-            Content = "Teleporting to base...",
-            Duration = 3
-        })
-    end
-})
-
--- SERVER TAB
-Tabs.Server:AddButton({
-    Title = "🔄 Rejoin Server",
-    Description = "Rejoin the current server",
-    Callback = function()
-        game:GetService("TeleportService"):Teleport(game.PlaceId, player)
-    end
-})
-
-Tabs.Server:AddButton({
-    Title = "🚪 Leave Game",
-    Description = "Leave the current game",
-    Callback = function()
-        player:Kick("Left the game via Water Hub")
-    end
-})
-
-local playerCountLabel = Tabs.Server:AddParagraph({
-    Title = "👥 Players",
-    Content = #Players:GetPlayers() .. "/" .. Players.MaxPlayers
-})
-
-local pingLabel = Tabs.Server:AddParagraph({
-    Title = "📡 Ping",
-    Content = "Calculating..."
-})
-
--- Update functions
-local function updatePlayerCount()
-    playerCountLabel:SetDesc("👥 " .. #Players:GetPlayers() .. "/" .. Players.MaxPlayers)
-end
-
--- Main update loop
-RunService.Heartbeat:Connect(function()
-    if tick() % 2 < 0.016 then
-        updatePlayerCount()
-        
-        local ping = math.floor(game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue())
-        if ping then
-            pingLabel:SetDesc("📡 " .. ping .. "ms")
+Tabs.Main:AddToggle("KillAura", {
+    Title = "🗡️ Kill Aura 360°",
+    Description = "Automatically attack nearby players in all directions",
+    Default = false,
+    Callback = function(value)
+        if value then
+            activateKillAura()
+        else
+            deactivateKillAura()
         end
     end
-end)
+})
+
+-- MISC SECTION
+Tabs.Main:AddSection("Misc Features")
+
+-- Enhanced Base System
+local function createBaseSystemGui()
+    if baseSystemGui then
+        baseSystemGui:Destroy()
+    end
+    
+    baseSystemGui = Instance.new("ScreenGui")
+    baseSystemGui.Name = "BaseSystem"
+    baseSystemGui.Parent = playerGui
+    baseSystemGui.ResetOnSpawn = false
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.fromOffset(220, 180)
+    frame.Position = UDim2.new(0.5, -110, 0.5, -90)
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    frame.BackgroundTransparency = 0.1
+    frame.BorderSizePixel = 0
+    frame.Parent = baseSystemGui
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = frame
+    
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(0, 170, 255)
+    stroke.Transparency = 0.5
+    stroke.Thickness = 1
+    stroke.Parent = frame
+    
+    -- Title bar for dragging
+    local titleBar = Instance.new("Frame")
+    titleBar.Size = UDim2.new(1, 0, 0, 25)
+    titleBar.Position = UDim2.new(0, 0, 0, 0)
+    titleBar.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    titleBar.BackgroundTransparency = 0.3
+    titleBar.BorderSizePixel = 0
+    titleBar.Parent = frame
+    titleBar.Active = true
+    titleBar.Draggable = true
+    
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 8)
+    titleCorner.Parent = titleBar
+    
+    local titleFix = Instance.new("Frame")
+    titleFix.Size = UDim2.new(1, 0, 0, 8)
+    titleFix.Position = UDim2.new(0, 0, 1, -8)
+    titleFix.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    titleFix.BackgroundTransparency = 0.3
+    titleFix.BorderSizePixel = 0
+    titleFix.Parent = titleBar
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -25, 1, 0)
+    title.Position = UDim2.new(0, 5, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = "📍 Base System"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextSize = 11
+    title.Font = Enum.Font.SourceSansBold
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = titleBar
+    
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Size = UDim2.fromOffset(20, 20)
+    closeBtn.Position = UDim2.new(1, -22, 0, 2.5)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(255, 70, 70)
+    closeBtn.BackgroundTransparency = 0.2
+    closeBtn.Text = "×"
+    closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeBtn.TextSize = 12
+    closeBtn.Font = Enum.Font.SourceSansBold
+    closeBtn.Parent = titleBar
+    
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 4)
+    closeCorner.Parent = closeBtn
+    
+    closeBtn.MouseButton1Click:Connect(function()
+        baseSystemGui:Destroy()
+    end)
+    
+    -- Base status section
+    local statusSection = Instance.new("Frame")
+    statusSection.Size = UDim2.new(1, -10, 0, 25)
+    statusSection.Position = UDim2.new(0, 5, 0, 30)
+    statusSection.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    statusSection.BackgroundTransparency = 0.3
+    statusSection.BorderSizePixel = 0
+    statusSection.Parent = frame
+    
+    local statusCorner = Instance.new("UICorner")
+    statusCorner.CornerRadius = UDim.new(0, 6)
+    statusCorner.Parent = statusSection
+    
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(1, -10, 1, 0)
+    statusLabel.Position = UDim2.new(0, 5, 0, 0)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Text = basePosition and "✅ Base Position Set" or "❌ Base Position Not Set"
+    statusLabel.TextColor3 = basePosition and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
+    statusLabel.TextSize = 10
+    statusLabel.Font = Enum.Font.SourceSans
+    statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statusLabel.Parent = statusSection
+    
+    -- Coordinates display
+    local coordsSection = Instance.new("Frame")
+    coordsSection.Size = UDim2.new(1, -10, 0, 30)
+    coordsSection.Position = UDim2.new(0, 5, 0, 60)
+    coordsSection.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    coordsSection.BackgroundTransparency = 0.3
+    coordsSection.BorderSizePixel = 0
+    coordsSection.Parent = frame
+    
+    local coordsCorner = Instance.new("UICorner")
+    coordsCorner.CornerRadius = UDim.new(0, 6)
+    coordsCorner.Parent = coordsSection
+    
+    local coordsLabel = Instance.new("TextLabel")
+    coordsLabel.Size = UDim2.new(1, -10, 1, 0)
+    coordsLabel.Position = UDim2.new(0, 5, 0, 0)
+    coordsLabel.BackgroundTransparency = 1
+    coordsLabel.Text = basePosition and string.format("📍 X:%.1f Y:%.1f Z:%.1f", basePosition.X, basePosition.Y, basePosition.Z) or "📍 No coordinates set"
+    coordsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    coordsLabel.TextSize = 9
+    coordsLabel.Font = Enum.Font.SourceSans
+    coordsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    coordsLabel.Parent = coordsSection
+    
+    -- Set Base button
+    local setBtn = Instance.new("TextButton")
+    setBtn.Size = UDim2.new(1, -10, 0, 30)
+    setBtn.Position = UDim2.new(0, 5, 0, 95)
+    setBtn.BackgroundColor3 = Color3.fromRGB(40, 167, 69)
+    setBtn.BackgroundTransparency = 0.2
+    setBtn.Text = "SET BASE POSITION"
+    setBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    setBtn.TextSize = 10
+    setBtn.Font = Enum.Font.SourceSansBold
+    setBtn.Parent = frame
+    
+    local setCorner = Instance.new("UICorner")
+    setCorner.CornerRadius = UDim.new(0, 6)
+    setCorner.Parent = setBtn
+    
+    -- Teleport to Base button
+    local tpBtn = Instance.new("TextButton")
+    tpBtn.Size = UDim2.new(1, -10, 0, 35)
+    tpBtn.Position = UDim2.new(0, 5, 0, 130)
+    tpBtn.BackgroundColor3 = Color3.fromRGB(148, 0, 211)
+    tpBtn.BackgroundTransparency = 0.2
+    tpBtn.Text = "🚀 TELEPORT TO BASE"
+    tpBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    tpBtn.TextSize = 12
+    tpBtn.Font = Enum.Font.SourceSansBold
+    tpBtn.Parent = frame
+    
+    local tpCorner = Instance.new("UICorner")
+    tpCorner.CornerRadius = UDim.new(0, 6)
+    tpCorner.Parent = tpBtn
+    
+    -- Function to update display elements
+    local function updateDisplay()
+        if basePosition then
+            statusLabel.Text = "✅ Base Position Set"
+            statusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+            coordsLabel.Text = string.format("📍 X:%.1f Y:%.1f Z:%.1f", basePosition.X, basePosition.Y, basePosition.Z)
+            coordsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+        else
+            statusLabel.Text = "❌ Base Position Not Set"
+            statusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+            coordsLabel.Text = "📍 No coordinates set"
+            coordsLabel.TextColor3 = Color3.fromRGB(120, 120, 120)
+        end
+    end
+    
+    -- Event handlers
+    setBtn.MouseButton1Click:Connect(function()
+        local character = player.Character
+        local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+        
+        if rootPart then
+            basePosition = rootPart.Position
+            updateDisplay()
+            
+            -- Visual feedback on button
+            local originalColor = setBtn.BackgroundColor3
+            local originalText = setBtn.Text
+            setBtn.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
+            setBtn.Text = "✅ BASE SET!"
+            
+            task.spawn(function()
+                task.wait(1.5)
+                if setBtn and setBtn.Parent then
+                    setBtn.BackgroundColor3 = originalColor
+                    setBtn.Text = originalText
+                end
+            end)
+            
+            Fluent:Notify({
+                Title = "Base System",
+                Content = string.format("Base set at X:%.1f Y:%.1f Z:%.1f", basePosition.X, basePosition.Y, basePosition.Z),
+                Duration = 4
+            })
+        else
+            Fluent:Notify({
+                Title = "Base System",
+                Content = "Error: Cannot detect player position.",
+                Duration = 4
+            })
+        end
+    end)
+    
+    tpBtn.MouseButton1Click:Connect(function()
+        if not basePosition then
+            Fluent:Notify({
+                Title = "Teleport",
+                Content = "Please set a base position first!",
+                Duration = 4
+            })
+            
+            -- Highlight set button
+            local originalColor = setBtn.BackgroundColor3
+            setBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 100)
+            task.spawn(function()
+                task.wait(1.5)
+                if setBtn and setBtn.Parent then
+                    setBtn.BackgroundColor3 = originalColor
+                end
+            end)
+            return
+        end
+        
+        local rootPart = getRootPart()
+        if rootPart then
+            rootPart.CFrame = CFrame.new(basePosition)
+            Fluent:Notify({
+                Title = "Teleport",
+                Content = "Teleported to base position!",
+                Duration = 3
+            })
+        end
+    end)
+    
+    -- Initial display update
+    updateDisplay()
+end
+
+Tabs.Main:AddButton({
+    Title = "📍 Open Base System",
+    Description = "Set and teleport to your base position",
+    Callback = function()
+        createBaseSystemGui()
+    end
+})
 
 -- Configure managers
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
-InterfaceManager:SetFolder("FluentMobile")
-SaveManager:SetFolder("FluentMobile/config")
+InterfaceManager:SetFolder("BasketballHub")
+SaveManager:SetFolder("BasketballHub/config")
 
 Window:SelectTab(1)
 
 Fluent:Notify({
-    Title = "💧 Water HUB Loaded",
-    Content = "Take a Basket Player Edition Activated!",
-    Duration = 5
+    Title = "🏀 Basketball Hub Loaded",
+    Content = "All features activated! Enjoy your game!",
+    Duration = 5,
+    Image = "rbxassetid://6034684930"
 })
 
 -- Anti-AFK
 game:GetService("Players").LocalPlayer.Idled:Connect(function()
-    game:GetService("VirtualUser"):CaptureController()
-    game:GetService("VirtualUser"):ClickButton2(Vector2.new())
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
 end)
 
 SaveManager:LoadAutoloadConfig()
+
+-- Character cleanup on respawn
+player.CharacterAdded:Connect(function(character)
+    -- Re-enable features if they were active
+    if states.fly then
+        startFlying()
+    end
+    
+    if states.noclip then
+        toggleNoclip(true)
+    end
+    
+    if states.killAura then
+        activateKillAura()
+    end
+end)
