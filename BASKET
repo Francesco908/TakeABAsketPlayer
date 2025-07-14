@@ -1,142 +1,104 @@
--- Take a Basket Player Script (English)
--- Features: No Clip, Anti Steal (Kill Aura), Fast Steal, Anti Kick Client
+-- Loader for Take a Basket Player Script with Floating Button
 
--- Load Fluent library and Addons
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+-- Persistent GUI button based on file source
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
--- Create main window
-local Window = Fluent:CreateWindow({
-    Title = "Take a Basket Player",
-    SubTitle = "by SKIBIDI",
-    TabWidth = 160,
-    Size = UDim2.fromOffset(580, 460),
-    Acrylic = true,
-    Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.LeftControl
-})
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
--- Create Tabs
-local Tabs = {
-    Main = Window:AddTab({ Title = "Main", Icon = "" }),
-    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
-}
+local persistentGui = Instance.new("ScreenGui")
+persistentGui.Name = "FluentPersistentButton"
+persistentGui.Parent = playerGui
+persistentGui.ResetOnSpawn = false
+persistentGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+persistentGui.Enabled = true
 
--- Reference Options
-local Options = Fluent.Options
+local imageButton = Instance.new("ImageButton")
+imageButton.Name = "PersistentControl"
+imageButton.Size = UDim2.fromOffset(70, 70)
+imageButton.Position = UDim2.new(0, 20, 0.5, -35)
+imageButton.AnchorPoint = Vector2.new(0, 0.5)
+imageButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+imageButton.BorderSizePixel = 0
+imageButton.Image = "rbxassetid://6034684930"
+imageButton.ScaleType = Enum.ScaleType.Fit
+imageButton.BackgroundTransparency = 0.5
+imageButton.ImageTransparency = 0.2
+imageButton.Parent = persistentGui
 
--- Build Main Tab
-do
-    -- Notification on load
-    Fluent:Notify({
-        Title = "Take a Basket Player",
-        Content = "Script loaded!",
-        Duration = 5
-    })
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0.3, 0)
+corner.Parent = imageButton
 
-    -- No Clip Toggle
-    local NoClip = Tabs.Main:AddToggle("NoClip", {
-        Title = "No Clip",
-        Description = "Walk through walls",
-        Default = false
-    })
-    NoClip:OnChanged(function(state)
-        local rs = game:GetService("RunService")
-        if state then
-            NoClip._conn = rs.Stepped:Connect(function()
-                local char = game.Players.LocalPlayer.Character
-                if char and char:FindFirstChild("HumanoidRootPart") then
-                    char.HumanoidRootPart.CanCollide = false
-                end
-            end)
-        else
-            if NoClip._conn then NoClip._conn:Disconnect() end
-            local char = game.Players.LocalPlayer.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                char.HumanoidRootPart.CanCollide = true
-            end
-        end
-    end)
+local dragging = false
+local dragStart, startPos
 
-    -- Anti Steal (Kill Aura) Toggle
-    local KillAura = Tabs.Main:AddToggle("KillAura", {
-        Title = "Anti Steal (Kill Aura)",
-        Description = "Automatically attack players within 10 studs",
-        Default = false
-    })
-    KillAura:OnChanged(function(state)
-        if state then
-            spawn(function()
-                while KillAura.Value do
-                    for _, player in pairs(game.Players:GetPlayers()) do
-                        if player ~= game.Players.LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-                            local dist = (player.Character.HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-                            if dist < 10 then
-                                -- Adapt this event to your game's attack remote name
-                                local attack = game:GetService("ReplicatedStorage"):FindFirstChild("AttackEvent")
-                                if attack then attack:FireServer(player) end
-                            end
-                        end
-                    end
-                    wait(0.1)
-                end
-            end)
-        end
-    end)
-
-    -- Fast Steal Button
-    Tabs.Main:AddButton({
-        Title = "Fast Steal",
-        Description = "Instantly triggers all StealZone prompts",
-        Callback = function()
-            for _, obj in pairs(workspace:GetDescendants()) do
-                if obj:IsA("ProximityPrompt") and obj.Parent:IsA("BasePart") and obj.Name == "StealPrompt" then
-                    obj.HoldDuration = 0
-                    obj:InputHoldBegin()
-                    obj:InputHoldEnd()
-                end
-            end
-        end
-    })
+local function onDragStart(input)
+    dragging = true
+    dragStart = input.Position
+    startPos = imageButton.Position
 end
 
--- Build Settings Tab
--- Hand library to managers
-SaveManager:SetLibrary(Fluent)
-InterfaceManager:SetLibrary(Fluent)
+local function onDragEnd()
+    dragging = false
+end
 
--- Ignore theme settings in save manager
-SaveManager:IgnoreThemeSettings()
+local function onDragMove(input)
+    if dragging then
+        local delta = input.Position - dragStart
+        imageButton.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end
 
--- Build UI sections
-InterfaceManager:SetFolder("TakeABasketPlayer")
-SaveManager:SetFolder("TakeABasketPlayer/configs")
-InterfaceManager:BuildInterfaceSection(Tabs.Settings)
-SaveManager:BuildConfigSection(Tabs.Settings)
-
--- Anti Kick Client Toggle in Settings
-Tabs.Settings:AddParagraph({ Title = "Client Protection", Content = "Toggle client-side protections below." })
-local AntiKick = Tabs.Settings:AddToggle("AntiKick", {
-    Title = "Anti Kick",
-    Description = "Block server Kick() calls",
-    Default = true
-})
-AntiKick:OnChanged(function(state)
-    local mt = getrawmetatable(game)
-    setreadonly(mt, false)
-    local oldNamecall = mt.__namecall
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if method == "Kick" then return end
-        return oldNamecall(self, ...)
-    end)
-    setreadonly(mt, true)
+imageButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        onDragStart(input)
+    end
 end)
 
--- Finalize
-Window:SelectTab(1)
-Fluent:Notify({ Title = "Take a Basket Player", Content = "Ready to go!", Duration = 5 })
+imageButton.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        onDragEnd()
+    end
+end)
 
--- Autoload configs
-SaveManager:LoadAutoloadConfig()
+imageButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        onDragMove(input)
+    end
+end)
+
+-- Load Fluent GUI from GitHub on click
+local guiLoaded = false
+imageButton.MouseButton1Click:Connect(function()
+    if guiLoaded then return end
+    guiLoaded = true
+
+    local url = "https://raw.githubusercontent.com/Francesco908/TakeABAsketPlayer/main/BASKET.lua"
+    local success, result = pcall(function()
+        return loadstring(game:HttpGet(url))()
+    end)
+
+    if not success then
+        warn("[TakeABasketPlayer] Failed to load script from GitHub:", result)
+    else
+        print("[TakeABasketPlayer] Loaded successfully from:", url)
+    end
+end)
+
+-- Rotate imageButton for visual effect
+spawn(function()
+    local rotation = 0
+    while imageButton and imageButton.Parent do
+        rotation = rotation + 2
+        imageButton.Rotation = rotation
+        RunService.Heartbeat:Wait()
+    end
+end)
