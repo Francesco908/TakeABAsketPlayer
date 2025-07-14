@@ -1,19 +1,33 @@
--- Servizi
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UIS = game:GetService("UserInputService")
-local Player = Players.LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
+-- Take a basket player Script
+-- Created with Fluent UI Library
 
--- Caricamento della libreria Fluent
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 
--- Creazione della finestra Fluent
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+
+-- Variables
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- Script States
+local NoClipEnabled = false
+local AntiStealEnabled = false
+local FastStealEnabled = false
+local AntiKickEnabled = false
+
+-- Create Window
 local Window = Fluent:CreateWindow({
-    Title = "Take a Basket Player",
-    SubTitle = "Loader",
+    Title = "Take a basket player " .. Fluent.Version,
+    SubTitle = "by Player",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
     Acrylic = true,
@@ -21,161 +35,376 @@ local Window = Fluent:CreateWindow({
     MinimizeKey = Enum.KeyCode.LeftControl
 })
 
+-- Create Tabs
 local Tabs = {
     Main = Window:AddTab({ Title = "Main", Icon = "home" }),
-    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+    Other = Window:AddTab({ Title = "Other", Icon = "settings" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "cog" })
 }
 
--- Istruzioni per l'utente
-Tabs.Main:AddParagraph({
-    Title = "Istruzioni",
-    Content = "Clicca il pulsante 'Carica Script' per caricare lo script da GitHub. Se fallisce, puoi incollare il codice dello script nel campo qui sotto e premere Invio per eseguirlo."
-})
+local Options = Fluent.Options
 
--- Pulsante per caricare lo script da GitHub
-Tabs.Main:AddButton({
-    Title = "Carica Script",
-    Description = "Carica lo script Take a Basket Player da GitHub",
-    Callback = function()
-        local url = "https://raw.githubusercontent.com/Francesco908/TakeABAsketPlayer/main/BASKET.lua"
-        local success, result = pcall(function()
-            return loadstring(game:HttpGet(url))()
-        end)
-        if success then
-            Fluent:Notify({
-                Title = "Successo",
-                Content = "Script caricato con successo!",
-                Duration = 5
-            })
-        else
-            Fluent:Notify({
-                Title = "Errore",
-                Content = "Impossibile caricare lo script: " .. tostring(result),
-                Duration = 5
-            })
-        end
-    end
-})
-
--- Campo di input per incollare lo script manualmente
-Tabs.Main:AddInput("ScriptInput", {
-    Title = "Incolla Script",
-    Default = "",
-    Placeholder = "Incolla qui il codice dello script",
-    Numeric = false,
-    Finished = true,
-    Callback = function(value)
-        local success, result = pcall(function()
-            return loadstring(value)()
-        end)
-        if success then
-            Fluent:Notify({
-                Title = "Successo",
-                Content = "Script eseguito con successo!",
-                Duration = 5
-            })
-        else
-            Fluent:Notify({
-                Title = "Errore",
-                Content = "Impossibile eseguire lo script: " .. tostring(result),
-                Duration = 5
-            })
-        end
-    end
-})
-
--- Creazione del pulsante flottante
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "LoaderGUI"
-ScreenGui.Parent = PlayerGui
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.ResetOnSpawn = false
-
-local OpenButton = Instance.new("ImageButton")
-OpenButton.Name = "OpenButton"
-OpenButton.Parent = ScreenGui
-OpenButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-OpenButton.BorderSizePixel = 0
-OpenButton.Position = UDim2.new(0, 20, 0.5, -35)
-OpenButton.Size = UDim2.new(0, 70, 0, 70)
-OpenButton.Image = "rbxassetid://6034684930"
-OpenButton.BackgroundTransparency = 0.3
-OpenButton.ImageTransparency = 0.1
-OpenButton.AutoButtonColor = true
-
-local UICorner = Instance.new("UICorner")
-UICorner.CornerRadius = UDim.new(0.3, 0)
-UICorner.Parent = OpenButton
-
--- Logica per rendere il pulsante trascinabile
-local dragging, dragInput, dragStart, startPos
-
-local function update(input)
-    local delta = input.Position - dragStart
-    OpenButton.Position = UDim2.new(
-        startPos.X.Scale,
-        startPos.X.Offset + delta.X,
-        startPos.Y.Scale,
-        startPos.Y.Offset + delta.Y
-    )
+-- Utility Functions
+local function GetCharacter()
+    return LocalPlayer.Character
 end
 
-OpenButton.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = true
-        dragStart = input.Position
-        startPos = OpenButton.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end
-end)
+local function GetHumanoid()
+    local char = GetCharacter()
+    return char and char:FindFirstChild("Humanoid")
+end
 
-OpenButton.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        dragInput = input
-    end
-end)
+local function GetRootPart()
+    local char = GetCharacter()
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
 
-UIS.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        update(input)
-    end
-end)
-
--- Rotazione per effetto visivo
-spawn(function()
-    local rotation = 0
-    while OpenButton and OpenButton.Parent do
-        rotation = (rotation + 1.2) % 360
-        OpenButton.Rotation = rotation
-        RunService.RenderStepped:Wait()
-    end
-end)
-
--- Attivazione/disattivazione della finestra Fluent
-OpenButton.MouseButton1Click:Connect(function()
-    if Window.ScreenGui then
-        Window.ScreenGui.Enabled = not Window.ScreenGui.Enabled
-    else
-        -- Se Window.ScreenGui non è accessibile, cerca la ScreenGui di Fluent
-        for _, gui in pairs(PlayerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Name:find("Fluent") then
-                gui.Enabled = not gui.Enabled
-                break
+-- NoClip Function
+local function NoClip()
+    local char = GetCharacter()
+    if char then
+        for _, part in pairs(char:GetChildren()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
             end
         end
     end
+end
+
+-- Anti Steal Function (Kill Aura)
+local function AntiSteal()
+    if not AntiStealEnabled then return end
+    
+    local rootPart = GetRootPart()
+    if not rootPart then return end
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            local playerRoot = player.Character:FindFirstChild("HumanoidRootPart")
+            local playerHumanoid = player.Character:FindFirstChild("Humanoid")
+            
+            if playerRoot and playerHumanoid then
+                local distance = (rootPart.Position - playerRoot.Position).Magnitude
+                
+                -- If player is within range (adjust as needed)
+                if distance <= 15 then
+                    -- Try to damage/eliminate the player
+                    if playerHumanoid.Health > 0 then
+                        -- You may need to adjust this based on your game's damage system
+                        local args = {
+                            [1] = player,
+                            [2] = 100 -- damage amount
+                        }
+                        
+                        -- Try common remote names for damage
+                        pcall(function()
+                            if ReplicatedStorage:FindFirstChild("DamagePlayer") then
+                                ReplicatedStorage.DamagePlayer:FireServer(unpack(args))
+                            elseif ReplicatedStorage:FindFirstChild("Damage") then
+                                ReplicatedStorage.Damage:FireServer(unpack(args))
+                            end
+                        end)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Fast Steal Function
+local function FastSteal()
+    if not FastStealEnabled then return end
+    
+    -- Look for steal prompts or interactions
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") or obj:IsA("ClickDetector") then
+            -- Check if it's a steal-related prompt
+            local parent = obj.Parent
+            if parent and (parent.Name:lower():find("ball") or parent.Name:lower():find("basket") or parent.Name:lower():find("steal")) then
+                if obj:IsA("ProximityPrompt") then
+                    obj.HoldDuration = 0
+                    obj.KeyboardKeyCode = Enum.KeyCode.E
+                elseif obj:IsA("ClickDetector") then
+                    obj.MaxActivationDistance = 50
+                end
+            end
+        end
+    end
+end
+
+-- Anti Kick Function
+local function AntiKick()
+    if AntiKickEnabled then
+        -- Hook kick functions
+        local mt = getrawmetatable(game)
+        local oldNamecall = mt.__namecall
+        
+        setreadonly(mt, false)
+        mt.__namecall = function(self, ...)
+            local method = getnamecallmethod()
+            local args = {...}
+            
+            if method == "Kick" then
+                return nil
+            end
+            
+            return oldNamecall(self, ...)
+        end
+        setreadonly(mt, true)
+    end
+end
+
+-- Main Tab Elements
+do
+    Tabs.Main:AddParagraph({
+        Title = "Take a basket player",
+        Content = "Advanced basketball game features\nUse responsibly!"
+    })
+    
+    -- NoClip Toggle
+    local NoClipToggle = Tabs.Main:AddToggle("NoClip", {
+        Title = "No Clip",
+        Description = "Walk through walls and objects",
+        Default = false,
+        Callback = function(Value)
+            NoClipEnabled = Value
+            if Value then
+                Fluent:Notify({
+                    Title = "No Clip",
+                    Content = "No Clip enabled!",
+                    Duration = 3
+                })
+            else
+                Fluent:Notify({
+                    Title = "No Clip",
+                    Content = "No Clip disabled!",
+                    Duration = 3
+                })
+                -- Re-enable collision
+                local char = GetCharacter()
+                if char then
+                    for _, part in pairs(char:GetChildren()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = true
+                        end
+                    end
+                end
+            end
+        end
+    })
+    
+    -- Anti Steal Toggle
+    local AntiStealToggle = Tabs.Main:AddToggle("AntiSteal", {
+        Title = "Anti Steal",
+        Description = "Eliminates players who try to steal from you",
+        Default = false,
+        Callback = function(Value)
+            AntiStealEnabled = Value
+            if Value then
+                Fluent:Notify({
+                    Title = "Anti Steal",
+                    Content = "Anti Steal activated!",
+                    Duration = 3
+                })
+            else
+                Fluent:Notify({
+                    Title = "Anti Steal",
+                    Content = "Anti Steal deactivated!",
+                    Duration = 3
+                })
+            end
+        end
+    })
+    
+    -- Fast Steal Toggle
+    local FastStealToggle = Tabs.Main:AddToggle("FastSteal", {
+        Title = "Fast Steal",
+        Description = "Instant steal interactions",
+        Default = false,
+        Callback = function(Value)
+            FastStealEnabled = Value
+            if Value then
+                Fluent:Notify({
+                    Title = "Fast Steal",
+                    Content = "Fast Steal enabled!",
+                    Duration = 3
+                })
+            else
+                Fluent:Notify({
+                    Title = "Fast Steal",
+                    Content = "Fast Steal disabled!",
+                    Duration = 3
+                })
+            end
+        end
+    })
+    
+    -- Speed Slider
+    local SpeedSlider = Tabs.Main:AddSlider("Speed", {
+        Title = "Walk Speed",
+        Description = "Adjust your movement speed",
+        Default = 16,
+        Min = 16,
+        Max = 100,
+        Rounding = 1,
+        Callback = function(Value)
+            local humanoid = GetHumanoid()
+            if humanoid then
+                humanoid.WalkSpeed = Value
+            end
+        end
+    })
+    
+    -- Jump Power Slider
+    local JumpSlider = Tabs.Main:AddSlider("JumpPower", {
+        Title = "Jump Power",
+        Description = "Adjust your jump height",
+        Default = 50,
+        Min = 50,
+        Max = 200,
+        Rounding = 1,
+        Callback = function(Value)
+            local humanoid = GetHumanoid()
+            if humanoid then
+                humanoid.JumpPower = Value
+            end
+        end
+    })
+end
+
+-- Other Tab Elements
+do
+    Tabs.Other:AddParagraph({
+        Title = "Additional Features",
+        Content = "Extra utilities and protection"
+    })
+    
+    -- Anti Kick Toggle
+    local AntiKickToggle = Tabs.Other:AddToggle("AntiKick", {
+        Title = "Anti Kick Client",
+        Description = "Prevents the game from kicking you",
+        Default = false,
+        Callback = function(Value)
+            AntiKickEnabled = Value
+            AntiKick()
+            if Value then
+                Fluent:Notify({
+                    Title = "Anti Kick",
+                    Content = "Anti Kick protection enabled!",
+                    Duration = 3
+                })
+            else
+                Fluent:Notify({
+                    Title = "Anti Kick",
+                    Content = "Anti Kick protection disabled!",
+                    Duration = 3
+                })
+            end
+        end
+    })
+    
+    -- Teleport to Ball Button
+    Tabs.Other:AddButton({
+        Title = "Teleport to Ball",
+        Description = "Instantly teleport to the basketball",
+        Callback = function()
+            local ball = Workspace:FindFirstChild("Ball") or Workspace:FindFirstChild("Basketball")
+            local rootPart = GetRootPart()
+            
+            if ball and rootPart then
+                rootPart.CFrame = ball.CFrame + Vector3.new(0, 5, 0)
+                Fluent:Notify({
+                    Title = "Teleport",
+                    Content = "Teleported to ball!",
+                    Duration = 2
+                })
+            else
+                Fluent:Notify({
+                    Title = "Teleport",
+                    Content = "Ball not found!",
+                    Duration = 2
+                })
+            end
+        end
+    })
+    
+    -- Auto Collect Button
+    Tabs.Other:AddButton({
+        Title = "Auto Collect Items",
+        Description = "Automatically collect nearby items",
+        Callback = function()
+            local rootPart = GetRootPart()
+            if not rootPart then return end
+            
+            for _, obj in pairs(Workspace:GetChildren()) do
+                if obj:IsA("Part") and obj.Name:lower():find("coin") or obj.Name:lower():find("point") then
+                    if (obj.Position - rootPart.Position).Magnitude <= 50 then
+                        obj.CFrame = rootPart.CFrame
+                    end
+                end
+            end
+            
+            Fluent:Notify({
+                Title = "Auto Collect",
+                Content = "Collected nearby items!",
+                Duration = 2
+            })
+        end
+    })
+end
+
+-- Main Loops
+RunService.Heartbeat:Connect(function()
+    if NoClipEnabled then
+        NoClip()
+    end
+    
+    if AntiStealEnabled then
+        AntiSteal()
+    end
+    
+    if FastStealEnabled then
+        FastSteal()
+    end
 end)
 
--- Seleziona la prima scheda
+-- Character Respawn Handler
+LocalPlayer.CharacterAdded:Connect(function(char)
+    Character = char
+    Humanoid = char:WaitForChild("Humanoid")
+    RootPart = char:WaitForChild("HumanoidRootPart")
+    
+    -- Reapply speed/jump if needed
+    if Options.Speed and Options.Speed.Value ~= 16 then
+        Humanoid.WalkSpeed = Options.Speed.Value
+    end
+    if Options.JumpPower and Options.JumpPower.Value ~= 50 then
+        Humanoid.JumpPower = Options.JumpPower.Value
+    end
+end)
+
+-- Setup Save/Interface Managers
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+
+InterfaceManager:SetFolder("TakeBasketPlayer")
+SaveManager:SetFolder("TakeBasketPlayer/configs")
+
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+-- Select Main Tab
 Window:SelectTab(1)
 
--- Notifica di inizializzazione
+-- Welcome Notification
 Fluent:Notify({
-    Title = "Take a Basket Player",
-    Content = "Il loader è stato inizializzato.",
+    Title = "Take a basket player",
+    Content = "Script loaded successfully!",
     Duration = 5
 })
+
+-- Load auto config
+SaveManager:LoadAutoloadConfig()
