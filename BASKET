@@ -1,0 +1,142 @@
+-- Take a Basket Player Script (English)
+-- Features: No Clip, Anti Steal (Kill Aura), Fast Steal, Anti Kick Client
+
+-- Load Fluent library and Addons
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+-- Create main window
+local Window = Fluent:CreateWindow({
+    Title = "Take a Basket Player",
+    SubTitle = "by SKIBIDI",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+-- Create Tabs
+local Tabs = {
+    Main = Window:AddTab({ Title = "Main", Icon = "" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+-- Reference Options
+local Options = Fluent.Options
+
+-- Build Main Tab
+do
+    -- Notification on load
+    Fluent:Notify({
+        Title = "Take a Basket Player",
+        Content = "Script loaded!",
+        Duration = 5
+    })
+
+    -- No Clip Toggle
+    local NoClip = Tabs.Main:AddToggle("NoClip", {
+        Title = "No Clip",
+        Description = "Walk through walls",
+        Default = false
+    })
+    NoClip:OnChanged(function(state)
+        local rs = game:GetService("RunService")
+        if state then
+            NoClip._conn = rs.Stepped:Connect(function()
+                local char = game.Players.LocalPlayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    char.HumanoidRootPart.CanCollide = false
+                end
+            end)
+        else
+            if NoClip._conn then NoClip._conn:Disconnect() end
+            local char = game.Players.LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                char.HumanoidRootPart.CanCollide = true
+            end
+        end
+    end)
+
+    -- Anti Steal (Kill Aura) Toggle
+    local KillAura = Tabs.Main:AddToggle("KillAura", {
+        Title = "Anti Steal (Kill Aura)",
+        Description = "Automatically attack players within 10 studs",
+        Default = false
+    })
+    KillAura:OnChanged(function(state)
+        if state then
+            spawn(function()
+                while KillAura.Value do
+                    for _, player in pairs(game.Players:GetPlayers()) do
+                        if player ~= game.Players.LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                            local dist = (player.Character.HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                            if dist < 10 then
+                                -- Adapt this event to your game's attack remote name
+                                local attack = game:GetService("ReplicatedStorage"):FindFirstChild("AttackEvent")
+                                if attack then attack:FireServer(player) end
+                            end
+                        end
+                    end
+                    wait(0.1)
+                end
+            end)
+        end
+    end)
+
+    -- Fast Steal Button
+    Tabs.Main:AddButton({
+        Title = "Fast Steal",
+        Description = "Instantly triggers all StealZone prompts",
+        Callback = function()
+            for _, obj in pairs(workspace:GetDescendants()) do
+                if obj:IsA("ProximityPrompt") and obj.Parent:IsA("BasePart") and obj.Name == "StealPrompt" then
+                    obj.HoldDuration = 0
+                    obj:InputHoldBegin()
+                    obj:InputHoldEnd()
+                end
+            end
+        end
+    })
+end
+
+-- Build Settings Tab
+-- Hand library to managers
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+
+-- Ignore theme settings in save manager
+SaveManager:IgnoreThemeSettings()
+
+-- Build UI sections
+InterfaceManager:SetFolder("TakeABasketPlayer")
+SaveManager:SetFolder("TakeABasketPlayer/configs")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+-- Anti Kick Client Toggle in Settings
+Tabs.Settings:AddParagraph({ Title = "Client Protection", Content = "Toggle client-side protections below." })
+local AntiKick = Tabs.Settings:AddToggle("AntiKick", {
+    Title = "Anti Kick",
+    Description = "Block server Kick() calls",
+    Default = true
+})
+AntiKick:OnChanged(function(state)
+    local mt = getrawmetatable(game)
+    setreadonly(mt, false)
+    local oldNamecall = mt.__namecall
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        if method == "Kick" then return end
+        return oldNamecall(self, ...)
+    end)
+    setreadonly(mt, true)
+end)
+
+-- Finalize
+Window:SelectTab(1)
+Fluent:Notify({ Title = "Take a Basket Player", Content = "Ready to go!", Duration = 5 })
+
+-- Autoload configs
+SaveManager:LoadAutoloadConfig()
