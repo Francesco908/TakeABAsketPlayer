@@ -2,254 +2,1109 @@ local Player = game:GetService("Players").LocalPlayer
 local PlayerGui = Player:WaitForChild("PlayerGui")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local Debris = game:GetService("Debris")
 
--- Configurazione
-local API_KEY = "AIzaSyCs7MOursJk-vCG9ycl_vDBtbDUJUz_0KE"
-local CANVAS_NAME = "DrawingCanvas" -- Nome della tela nel tuo gioco
-local DRAW_COLOR = Color3.new(0, 0, 0) -- Colore del disegno (nero)
+-- CONFIGURAZIONE AVANZATA
+local CONFIG = {
+    API_KEY = "AIzaSyCs7MOursJk-vCG9ycl_vDBtbDUJUz_0KE",
+    CANVAS_NAME = "AI_DrawingCanvas",
+    DEFAULT_COLOR = Color3.new(0, 0, 0),
+    PIXEL_SIZE = 0.15,
+    CANVAS_SIZE = Vector3.new(20, 15, 0.1),
+    ANIMATION_SPEED = 0.3,
+    MAX_UNDO_STEPS = 50,
+    THEMES = {
+        -- Temi con disegni complessi
+        ["sole"] = {aliases = {"sun", "stella", "star"}, difficulty = 1},
+        ["casa"] = {aliases = {"house", "home", "abitazione"}, difficulty = 2},
+        ["cuore"] = {aliases = {"heart", "amore", "love"}, difficulty = 1},
+        ["albero"] = {aliases = {"tree", "pianta", "plant"}, difficulty = 3},
+        ["fiore"] = {aliases = {"flower", "rosa", "rose"}, difficulty = 2},
+        ["gatto"] = {aliases = {"cat", "micio", "kitty"}, difficulty = 4},
+        ["cane"] = {aliases = {"dog", "cucciolo", "puppy"}, difficulty = 4},
+        ["arcobaleno"] = {aliases = {"rainbow", "colori"}, difficulty = 3},
+        ["luna"] = {aliases = {"moon", "crescente"}, difficulty = 2},
+        ["montagna"] = {aliases = {"mountain", "monte", "collina"}, difficulty = 3},
+        ["nuvola"] = {aliases = {"cloud", "nube"}, difficulty = 2},
+        ["oceano"] = {aliases = {"ocean", "mare", "sea", "onda"}, difficulty = 3},
+        ["razzo"] = {aliases = {"rocket", "spazio", "space"}, difficulty = 4},
+        ["stella"] = {aliases = {"star", "stellina"}, difficulty = 1},
+        ["farfalla"] = {aliases = {"butterfly", "papillon"}, difficulty = 4},
+        ["diamante"] = {aliases = {"diamond", "gemma", "gem"}, difficulty = 2},
+        ["sorriso"] = {aliases = {"smile", "happy", "felice"}, difficulty = 1},
+        ["fulmine"] = {aliases = {"lightning", "tuono", "thunder"}, difficulty = 2},
+        ["chiave"] = {aliases = {"key", "serratura"}, difficulty = 3},
+        ["nota"] = {aliases = {"note", "musica", "music"}, difficulty = 2}
+    }
+}
 
--- Crea il GUI principale
-local aiHub = Instance.new("ScreenGui")
-aiHub.Name = "AI_HUB"
-aiHub.ResetOnSpawn = false
+-- Variabili globali
+local aiHub = nil
+local mainFrame = nil
+local canvas = nil
+local currentColor = CONFIG.DEFAULT_COLOR
+local drawingHistory = {}
+local isDrawing = false
+local currentTheme = ""
+local pixelCount = 0
+local startTime = 0
 
-local mainFrame = Instance.new("Frame")
-mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 350, 0, 200)
-mainFrame.Position = UDim2.new(0.5, -175, 0.5, -100)
-mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-mainFrame.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
-mainFrame.BorderSizePixel = 0
-mainFrame.ClipsDescendants = true
-
-local titleBar = Instance.new("Frame")
-titleBar.Name = "TitleBar"
-titleBar.Size = UDim2.new(1, 0, 0, 30)
-titleBar.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
-titleBar.BorderSizePixel = 0
-
-local titleText = Instance.new("TextLabel")
-titleText.Name = "Title"
-titleText.Size = UDim2.new(0.7, 0, 1, 0)
-titleText.BackgroundTransparency = 1
-titleText.Text = "AI Drawing Hub"
-titleText.TextColor3 = Color3.new(1, 1, 1)
-titleText.Font = Enum.Font.SourceSansBold
-
-local minimizeBtn = Instance.new("TextButton")
-minimizeBtn.Name = "MinimizeBtn"
-minimizeBtn.Size = UDim2.new(0, 30, 0, 30)
-minimizeBtn.Position = UDim2.new(1, -60, 0, 0)
-minimizeBtn.BackgroundTransparency = 1
-minimizeBtn.Text = "_"
-minimizeBtn.TextColor3 = Color3.new(1, 1, 1)
-
-local closeBtn = Instance.new("TextButton")
-closeBtn.Name = "CloseBtn"
-closeBtn.Size = UDim2.new(0, 30, 0, 30)
-closeBtn.Position = UDim2.new(1, -30, 0, 0)
-closeBtn.BackgroundTransparency = 1
-closeBtn.Text = "X"
-closeBtn.TextColor3 = Color3.new(1, 1, 1)
-
-local contentFrame = Instance.new("Frame")
-contentFrame.Name = "Content"
-contentFrame.Size = UDim2.new(1, 0, 1, -30)
-contentFrame.Position = UDim2.new(0, 0, 0, 30)
-contentFrame.BackgroundTransparency = 1
-
-local promptLabel = Instance.new("TextLabel")
-promptLabel.Name = "Prompt"
-promptLabel.Size = UDim2.new(1, -20, 0, 40)
-promptLabel.Position = UDim2.new(0, 10, 0, 10)
-promptLabel.BackgroundTransparency = 1
-promptLabel.Text = "Cosa vuoi disegnare oggi?"
-promptLabel.TextColor3 = Color3.new(1, 1, 1)
-promptLabel.TextSize = 20
-
-local inputBox = Instance.new("TextBox")
-inputBox.Name = "InputBox"
-inputBox.Size = UDim2.new(1, -20, 0, 40)
-inputBox.Position = UDim2.new(0, 10, 0, 60)
-inputBox.BackgroundColor3 = Color3.new(0.3, 0.3, 0.3)
-inputBox.PlaceholderText = "Inserisci un tema..."
-inputBox.TextColor3 = Color3.new(1, 1, 1)
-inputBox.ClearTextOnFocus = false
-
-local drawBtn = Instance.new("TextButton")
-drawBtn.Name = "DrawButton"
-drawBtn.Size = UDim2.new(0.5, -25, 0, 40)
-drawBtn.Position = UDim2.new(0, 10, 0, 110)
-drawBtn.BackgroundColor3 = Color3.new(0, 0.5, 1)
-drawBtn.Text = "Disegna!"
-drawBtn.TextColor3 = Color3.new(1, 1, 1)
-
--- Assemblaggio GUI
-titleBar.Parent = mainFrame
-titleText.Parent = titleBar
-minimizeBtn.Parent = titleBar
-closeBtn.Parent = titleBar
-contentFrame.Parent = mainFrame
-promptLabel.Parent = contentFrame
-inputBox.Parent = contentFrame
-drawBtn.Parent = contentFrame
-mainFrame.Parent = aiHub
-
--- Variabili di stato
-local minimized = false
-local originalSize = mainFrame.Size
-local dragging = false
-local dragStartPos, frameStartPos
-
--- Funzioni di movimento
-titleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStartPos = Vector2.new(input.Position.X, input.Position.Y)
-        frameStartPos = mainFrame.Position
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-        local delta = Vector2.new(input.Position.X, input.Position.Y) - dragStartPos
-        mainFrame.Position = UDim2.new(
-            frameStartPos.X.Scale,
-            frameStartPos.X.Offset + delta.X,
-            frameStartPos.Y.Scale,
-            frameStartPos.Y.Offset + delta.Y
-        )
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-    end
-end)
-
--- Funzioni finestra
-minimizeBtn.MouseButton1Click:Connect(function()
-    minimized = not minimized
-    if minimized then
-        contentFrame.Visible = false
-        mainFrame.Size = UDim2.new(0, 150, 0, 30)
-    else
-        contentFrame.Visible = true
-        mainFrame.Size = originalSize
-    end
-end)
-
-closeBtn.MouseButton1Click:Connect(function()
-    aiHub.Enabled = false
-end)
-
--- Funzione di disegno automatico
-local function drawOnCanvas(drawingData)
-    local canvas = workspace:FindFirstChild(CANVAS_NAME)
-    if not canvas then
-        warn("Canvas non trovato! Assicurati di avere un oggetto chiamato '"..CANVAS_NAME.."' nel Workspace")
-        return
+-- CREAZIONE CANVAS AVANZATA
+local function createCanvas()
+    -- Rimuovi canvas esistente
+    if workspace:FindFirstChild(CONFIG.CANVAS_NAME) then
+        workspace[CONFIG.CANVAS_NAME]:Destroy()
     end
     
-    local function drawPixel(position)
-        local part = Instance.new("Part")
-        part.Size = Vector3.new(0.2, 0.2, 0.01)
-        part.Position = position
-        part.Anchored = true
-        part.CanCollide = false
-        part.Color = DRAW_COLOR
-        part.Parent = canvas
-    end
-
-    -- Simulazione disegno basato sul tema
-    if drawingData == "sole" then
-        -- Disegno un sole
-        local center = canvas.Position + Vector3.new(0, 2, 0)
-        for i = 0, 360, 30 do
-            local angle = math.rad(i)
-            local ray = Vector3.new(math.cos(angle), math.sin(angle), 0) * 3
-            for j = 0, 1, 0.1 do
-                drawPixel(center + ray * j)
-            end
-        end
-        for i = 0, 360, 10 do
-            local angle = math.rad(i)
-            drawPixel(center + Vector3.new(math.cos(angle), math.sin(angle), 0) * 1.5)
-        end
-        
-    elseif drawingData == "casa" then
-        -- Disegno una casa
-        local basePos = canvas.Position
-        -- Base quadrata
-        for x = -2, 2, 0.2 do
-            for z = -2, 2, 0.2 do
-                drawPixel(basePos + Vector3.new(x, 0.5, z))
-            end
-        end
-        -- Tetto
-        for i = -2, 2, 0.2 do
-            for j = 0, 1.5, 0.1 do
-                drawPixel(basePos + Vector3.new(i, 1.5 + j, j))
-                drawPixel(basePos + Vector3.new(i, 1.5 + j, -j))
-            end
-        end
-        
-    else
-        -- Disegno generico a forma di cuore
-        local center = canvas.Position + Vector3.new(0, 2, 0)
-        for t = 0, math.pi * 2, 0.05 do
-            local x = 16 * math.sin(t)^3
-            local y = 13 * math.cos(t) - 5 * math.cos(2*t) - 2 * math.cos(3*t) - math.cos(4*t)
-            drawPixel(center + Vector3.new(x/5, -y/5, 0))
-        end
-    end
+    -- Crea nuovo model per la canvas
+    canvas = Instance.new("Model")
+    canvas.Name = CONFIG.CANVAS_NAME
+    
+    -- Base della canvas
+    local base = Instance.new("Part")
+    base.Name = "CanvasBase"
+    base.Size = CONFIG.CANVAS_SIZE
+    base.Position = workspace.CurrentCamera.CFrame.Position + workspace.CurrentCamera.CFrame.LookVector * 15
+    base.Anchored = true
+    base.CanCollide = false
+    base.Material = Enum.Material.SmoothPlastic
+    base.Color = Color3.new(1, 1, 1)
+    base.Parent = canvas
+    
+    -- Bordo decorativo
+    local border = Instance.new("SelectionBox")
+    border.Adornee = base
+    border.Color3 = Color3.new(0, 0.5, 1)
+    border.LineThickness = 0.1
+    border.Parent = base
+    
+    canvas.Parent = workspace
+    return base
 end
 
--- Funzione di riconoscimento tema (simulata)
-local function recognizeTheme(inputText)
-    inputText = string.lower(inputText)
+-- SISTEMA DI PARTICELLE PER EFFETTI
+local function createParticleEffect(position, color)
+    local part = Instance.new("Part")
+    part.Size = Vector3.new(0.1, 0.1, 0.1)
+    part.Position = position
+    part.Anchored = true
+    part.CanCollide = false
+    part.Material = Enum.Material.Neon
+    part.Color = color
+    part.Transparency = 0
+    part.Parent = canvas
     
-    -- Mappatura temi semplici
-    local themeMap = {
-        ["sole"] = {"sole", "sun", "stellar"},
-        ["casa"] = {"casa", "house", "home", "abitazione"},
-        ["cuore"] = {"cuore", "heart", "amore"}
+    -- Animazione particella
+    local tween = TweenService:Create(part, 
+        TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {
+            Size = Vector3.new(0.3, 0.3, 0.3),
+            Transparency = 1,
+            Position = position + Vector3.new(math.random(-1, 1), math.random(0, 2), 0)
+        }
+    )
+    tween:Play()
+    Debris:AddItem(part, 0.5)
+end
+
+-- CREAZIONE GUI AVANZATA
+local function createGUI()
+    -- Distruggi GUI esistente
+    if PlayerGui:FindFirstChild("AI_HUB") then
+        PlayerGui.AI_HUB:Destroy()
+    end
+    
+    aiHub = Instance.new("ScreenGui")
+    aiHub.Name = "AI_HUB"
+    aiHub.ResetOnSpawn = false
+    aiHub.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    -- Frame principale con angoli arrotondati
+    mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 400, 0, 500)
+    mainFrame.Position = UDim2.new(0.5, -200, 0.5, -250)
+    mainFrame.BackgroundColor3 = Color3.new(0.15, 0.15, 0.15)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.ClipsDescendants = true
+    
+    -- UICorner per angoli arrotondati
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = mainFrame
+    
+    -- Gradiente di sfondo
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.new(0.2, 0.2, 0.2)),
+        ColorSequenceKeypoint.new(1, Color3.new(0.1, 0.1, 0.1))
+    }
+    gradient.Rotation = 90
+    gradient.Parent = mainFrame
+    
+    -- TITLE BAR STILIZZATA
+    local titleBar = Instance.new("Frame")
+    titleBar.Name = "TitleBar"
+    titleBar.Size = UDim2.new(1, 0, 0, 40)
+    titleBar.BackgroundColor3 = Color3.new(0, 0.4, 0.8)
+    titleBar.BorderSizePixel = 0
+    
+    local titleGradient = Instance.new("UIGradient")
+    titleGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)),
+        ColorSequenceKeypoint.new(1, Color3.new(0.8, 0.8, 1))
+    }
+    titleGradient.Parent = titleBar
+    
+    local titleText = Instance.new("TextLabel")
+    titleText.Size = UDim2.new(0.7, 0, 1, 0)
+    titleText.Position = UDim2.new(0, 10, 0, 0)
+    titleText.BackgroundTransparency = 1
+    titleText.Text = "🎨 AI Drawing Hub Ultimate"
+    titleText.TextColor3 = Color3.new(1, 1, 1)
+    titleText.Font = Enum.Font.SourceSansBold
+    titleText.TextScaled = true
+    titleText.Parent = titleBar
+    
+    -- Bottoni finestra
+    local closeBtn = createWindowButton("X", UDim2.new(1, -40, 0, 5), Color3.new(1, 0.3, 0.3))
+    local minimizeBtn = createWindowButton("_", UDim2.new(1, -80, 0, 5), Color3.new(1, 0.8, 0.3))
+    closeBtn.Parent = titleBar
+    minimizeBtn.Parent = titleBar
+    
+    -- CONTENT FRAME
+    local contentFrame = Instance.new("ScrollingFrame")
+    contentFrame.Name = "Content"
+    contentFrame.Size = UDim2.new(1, -20, 1, -50)
+    contentFrame.Position = UDim2.new(0, 10, 0, 45)
+    contentFrame.BackgroundTransparency = 1
+    contentFrame.ScrollBarThickness = 8
+    contentFrame.CanvasSize = UDim2.new(0, 0, 0, 700)
+    contentFrame.Parent = mainFrame
+    
+    -- SEZIONE INPUT
+    local inputSection = createSection("Input Creativo", 0)
+    inputSection.Parent = contentFrame
+    
+    local promptLabel = Instance.new("TextLabel")
+    promptLabel.Size = UDim2.new(1, -20, 0, 30)
+    promptLabel.Position = UDim2.new(0, 10, 0, 40)
+    promptLabel.BackgroundTransparency = 1
+    promptLabel.Text = "✨ Cosa vuoi che disegni oggi?"
+    promptLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+    promptLabel.Font = Enum.Font.SourceSans
+    promptLabel.TextSize = 18
+    promptLabel.Parent = inputSection
+    
+    local inputBox = Instance.new("TextBox")
+    inputBox.Name = "InputBox"
+    inputBox.Size = UDim2.new(1, -20, 0, 40)
+    inputBox.Position = UDim2.new(0, 10, 0, 75)
+    inputBox.BackgroundColor3 = Color3.new(0.25, 0.25, 0.25)
+    inputBox.BorderSizePixel = 0
+    inputBox.PlaceholderText = "Es: sole, casa, cuore, albero, gatto..."
+    inputBox.TextColor3 = Color3.new(1, 1, 1)
+    inputBox.Font = Enum.Font.SourceSans
+    inputBox.TextSize = 16
+    inputBox.ClearTextOnFocus = false
+    inputBox.Parent = inputSection
+    
+    local inputCorner = Instance.new("UICorner")
+    inputCorner.CornerRadius = UDim.new(0, 8)
+    inputCorner.Parent = inputBox
+    
+    -- BOTTONI AZIONE
+    local buttonContainer = Instance.new("Frame")
+    buttonContainer.Size = UDim2.new(1, -20, 0, 45)
+    buttonContainer.Position = UDim2.new(0, 10, 0, 125)
+    buttonContainer.BackgroundTransparency = 1
+    buttonContainer.Parent = inputSection
+    
+    local drawBtn = createStyledButton("🎨 Disegna!", UDim2.new(0.48, 0, 1, 0), UDim2.new(0, 0, 0, 0), Color3.new(0, 0.6, 1))
+    local clearBtn = createStyledButton("🗑️ Pulisci", UDim2.new(0.48, 0, 1, 0), UDim2.new(0.52, 0, 0, 0), Color3.new(0.8, 0.2, 0.2))
+    drawBtn.Parent = buttonContainer
+    clearBtn.Parent = buttonContainer
+    
+    -- SEZIONE COLORI
+    local colorSection = createSection("Palette Colori", 180)
+    colorSection.Parent = contentFrame
+    
+    local colorPalette = Instance.new("Frame")
+    colorPalette.Size = UDim2.new(1, -20, 0, 80)
+    colorPalette.Position = UDim2.new(0, 10, 0, 40)
+    colorPalette.BackgroundTransparency = 1
+    colorPalette.Parent = colorSection
+    
+    -- Crea palette colori
+    local colors = {
+        Color3.new(0, 0, 0),        -- Nero
+        Color3.new(1, 1, 1),        -- Bianco
+        Color3.new(1, 0, 0),        -- Rosso
+        Color3.new(0, 1, 0),        -- Verde
+        Color3.new(0, 0, 1),        -- Blu
+        Color3.new(1, 1, 0),        -- Giallo
+        Color3.new(1, 0, 1),        -- Magenta
+        Color3.new(0, 1, 1),        -- Ciano
+        Color3.new(1, 0.5, 0),      -- Arancione
+        Color3.new(0.5, 0, 1),      -- Viola
+        Color3.new(1, 0.75, 0.8),   -- Rosa
+        Color3.new(0.5, 0.25, 0),   -- Marrone
     }
     
-    for theme, keywords in pairs(themeMap) do
-        for _, kw in ipairs(keywords) do
-            if string.find(inputText, kw) then
+    for i, color in ipairs(colors) do
+        local colorBtn = Instance.new("TextButton")
+        colorBtn.Size = UDim2.new(0, 35, 0, 35)
+        colorBtn.Position = UDim2.new(0, ((i-1) % 6) * 40, 0, math.floor((i-1) / 6) * 40)
+        colorBtn.BackgroundColor3 = color
+        colorBtn.BorderSizePixel = 2
+        colorBtn.BorderColor3 = Color3.new(0.3, 0.3, 0.3)
+        colorBtn.Text = ""
+        colorBtn.Parent = colorPalette
+        
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 8)
+        btnCorner.Parent = colorBtn
+        
+        colorBtn.MouseButton1Click:Connect(function()
+            currentColor = color
+            updateColorIndicator()
+        end)
+    end
+    
+    -- SEZIONE STATISTICHE
+    local statsSection = createSection("Statistiche Disegno", 310)
+    statsSection.Parent = contentFrame
+    
+    local statsLabel = Instance.new("TextLabel")
+    statsLabel.Name = "StatsLabel"
+    statsLabel.Size = UDim2.new(1, -20, 0, 80)
+    statsLabel.Position = UDim2.new(0, 10, 0, 40)
+    statsLabel.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+    statsLabel.BorderSizePixel = 0
+    statsLabel.Text = "📊 Statistiche:\n• Pixel: 0\n• Tempo: 0s\n• Tema: Nessuno"
+    statsLabel.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+    statsLabel.Font = Enum.Font.Code
+    statsLabel.TextSize = 14
+    statsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    statsLabel.Parent = statsSection
+    
+    local statsCorner = Instance.new("UICorner")
+    statsCorner.CornerRadius = UDim.new(0, 8)
+    statsCorner.Parent = statsLabel
+    
+    -- SEZIONE CONTROLLI AVANZATI
+    local advancedSection = createSection("Controlli Avanzati", 440)
+    advancedSection.Parent = contentFrame
+    
+    local controlsContainer = Instance.new("Frame")
+    controlsContainer.Size = UDim2.new(1, -20, 0, 100)
+    controlsContainer.Position = UDim2.new(0, 10, 0, 40)
+    controlsContainer.BackgroundTransparency = 1
+    controlsContainer.Parent = advancedSection
+    
+    local undoBtn = createStyledButton("↶ Annulla", UDim2.new(0.48, 0, 0, 35), UDim2.new(0, 0, 0, 0), Color3.new(0.5, 0.5, 0.5))
+    local saveBtn = createStyledButton("💾 Salva", UDim2.new(0.48, 0, 0, 35), UDim2.new(0.52, 0, 0, 0), Color3.new(0.2, 0.7, 0.2))
+    local randomBtn = createStyledButton("🎲 Random", UDim2.new(0.48, 0, 0, 35), UDim2.new(0, 0, 0, 40), Color3.new(0.7, 0.3, 0.7))
+    local animateBtn = createStyledButton("✨ Anima", UDim2.new(0.48, 0, 0, 35), UDim2.new(0.52, 0, 0, 40), Color3.new(0.9, 0.6, 0.1))
+    
+    undoBtn.Parent = controlsContainer
+    saveBtn.Parent = controlsContainer
+    randomBtn.Parent = controlsContainer
+    animateBtn.Parent = controlsContainer
+    
+    -- Assemblaggio finale
+    titleBar.Parent = mainFrame
+    mainFrame.Parent = aiHub
+    aiHub.Parent = PlayerGui
+    
+    -- EVENT HANDLERS
+    
+    -- Chiusura finestra
+    closeBtn.MouseButton1Click:Connect(function()
+        local closeTween = TweenService:Create(mainFrame,
+            TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+            {Size = UDim2.new(0, 0, 0, 0), Rotation = 360}
+        )
+        closeTween:Play()
+        closeTween.Completed:Connect(function()
+            aiHub:Destroy()
+        end)
+    end)
+    
+    -- Minimizza finestra
+    local minimized = false
+    local originalSize = mainFrame.Size
+    minimizeBtn.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        if minimized then
+            local tween = TweenService:Create(mainFrame,
+                TweenInfo.new(0.3, Enum.EasingStyle.Quad),
+                {Size = UDim2.new(0, 400, 0, 40)}
+            )
+            tween:Play()
+            contentFrame.Visible = false
+        else
+            local tween = TweenService:Create(mainFrame,
+                TweenInfo.new(0.3, Enum.EasingStyle.Quad),
+                {Size = originalSize}
+            )
+            tween:Play()
+            contentFrame.Visible = true
+        end
+    end)
+    
+    -- Drag della finestra
+    local dragging = false
+    local dragStart = nil
+    local startPos = nil
+    
+    titleBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(
+                startPos.X.Scale,
+                startPos.X.Offset + delta.X,
+                startPos.Y.Scale,
+                startPos.Y.Offset + delta.Y
+            )
+        end
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    
+    -- FUNZIONI DISEGNO
+    drawBtn.MouseButton1Click:Connect(function()
+        local theme = inputBox.Text:lower()
+        if theme == "" then
+            animateText(promptLabel, "⚠️ Inserisci un tema prima!")
+            return
+        end
+        
+        if isDrawing then
+            animateText(promptLabel, "⏳ Disegno in corso...")
+            return
+        end
+        
+        local recognized = recognizeTheme(theme)
+        if recognized then
+            startDrawing(recognized)
+        else
+            animateText(promptLabel, "❓ Tema non riconosciuto, disegno generico...")
+            startDrawing("random")
+        end
+    end)
+    
+    clearBtn.MouseButton1Click:Connect(function()
+        clearCanvas()
+        updateStats()
+    end)
+    
+    undoBtn.MouseButton1Click:Connect(function()
+        undoLastAction()
+    end)
+    
+    saveBtn.MouseButton1Click:Connect(function()
+        saveDrawing()
+    end)
+    
+    randomBtn.MouseButton1Click:Connect(function()
+        local themes = {}
+        for theme, _ in pairs(CONFIG.THEMES) do
+            table.insert(themes, theme)
+        end
+        local randomTheme = themes[math.random(#themes)]
+        inputBox.Text = randomTheme
+        startDrawing(randomTheme)
+    end)
+    
+    animateBtn.MouseButton1Click:Connect(function()
+        animateCanvas()
+    end)
+    
+    -- Auto-update stats
+    spawn(function()
+        while aiHub and aiHub.Parent do
+            if isDrawing then
+                updateStats()
+            end
+            wait(0.1)
+        end
+    end)
+end
+
+-- FUNZIONI HELPER
+function createWindowButton(text, position, hoverColor)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 30, 0, 30)
+    btn.Position = position
+    btn.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+    btn.BorderSizePixel = 0
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 18
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = btn
+    
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = hoverColor}):Play()
+    end)
+    
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)}):Play()
+    end)
+    
+    return btn
+end
+
+function createStyledButton(text, size, position, color)
+    local btn = Instance.new("TextButton")
+    btn.Size = size
+    btn.Position = position
+    btn.BackgroundColor3 = color
+    btn.BorderSizePixel = 0
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextScaled = true
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = btn
+    
+    local shadow = Instance.new("Frame")
+    shadow.Size = UDim2.new(1, 4, 1, 4)
+    shadow.Position = UDim2.new(0, 2, 0, 2)
+    shadow.BackgroundColor3 = Color3.new(0, 0, 0)
+    shadow.BackgroundTransparency = 0.5
+    shadow.ZIndex = btn.ZIndex - 1
+    shadow.Parent = btn
+    
+    local shadowCorner = Instance.new("UICorner")
+    shadowCorner.CornerRadius = UDim.new(0, 8)
+    shadowCorner.Parent = shadow
+    
+    btn.MouseButton1Down:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.1), {Size = UDim2.new(size.X.Scale * 0.95, size.X.Offset * 0.95, size.Y.Scale * 0.95, size.Y.Offset * 0.95)}):Play()
+    end)
+    
+    btn.MouseButton1Up:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.1), {Size = size}):Play()
+    end)
+    
+    return btn
+end
+
+function createSection(title, yPos)
+    local section = Instance.new("Frame")
+    section.Size = UDim2.new(1, 0, 0, 150)
+    section.Position = UDim2.new(0, 0, 0, yPos)
+    section.BackgroundTransparency = 1
+    
+    local header = Instance.new("TextLabel")
+    header.Size = UDim2.new(1, -20, 0, 30)
+    header.Position = UDim2.new(0, 10, 0, 0)
+    header.BackgroundColor3 = Color3.new(0.1, 0.1, 0.1)
+    header.BorderSizePixel = 0
+    header.Text = "  " .. title
+    header.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+    header.Font = Enum.Font.SourceSansBold
+    header.TextSize = 16
+    header.TextXAlignment = Enum.TextXAlignment.Left
+    header.Parent = section
+    
+    local headerCorner = Instance.new("UICorner")
+    headerCorner.CornerRadius = UDim.new(0, 8)
+    headerCorner.Parent = header
+    
+    return section
+end
+
+-- FUNZIONI DISEGNO AVANZATE
+function recognizeTheme(input)
+    input = input:lower()
+    for theme, data in pairs(CONFIG.THEMES) do
+        if input == theme then return theme end
+        for _, alias in ipairs(data.aliases) do
+            if string.find(input, alias) then
                 return theme
             end
         end
     end
-    
-    return inputText -- Torna l'input originale se nessun match
+    return nil
 end
 
--- Gestione richiesta disegno
-drawBtn.MouseButton1Click:Connect(function()
-    local theme = inputBox.Text
-    if theme == "" then return end
+function startDrawing(theme)
+    if not canvas then
+        createCanvas()
+    end
     
-    -- Analizza il tema
-    local recognizedTheme = recognizeTheme(theme)
+    isDrawing = true
+    currentTheme = theme
+    pixelCount = 0
+    startTime = tick()
+    clearCanvas()
     
-    -- Pulisci la tela esistente
-    local canvas = workspace:FindFirstChild(CANVAS_NAME)
-    if canvas then
-        for _, child in ipairs(canvas:GetChildren()) do
-            if child:IsA("BasePart") then
-                child:Destroy()
-            end
+    -- Animazione inizio disegno
+    local canvasBase = canvas:FindFirstChild("CanvasBase")
+    if canvasBase then
+        local startTween = TweenService:Create(canvasBase,
+            TweenInfo.new(0.5, Enum.EasingStyle.Elastic),
+            {Size = canvasBase.Size * 1.1}
+        )
+        startTween:Play()
+        wait(0.5)
+        TweenService:Create(canvasBase,
+            TweenInfo.new(0.3),
+            {Size = CONFIG.CANVAS_SIZE}
+        ):Play()
+    end
+    
+    -- Disegna in base al tema
+    spawn(function()
+        if theme == "sole" then
+            drawSun()
+        elseif theme == "casa" then
+            drawHouse()
+        elseif theme == "cuore" then
+            drawHeart()
+        elseif theme == "albero" then
+            drawTree()
+        elseif theme == "fiore" then
+            drawFlower()
+        elseif theme == "gatto" then
+            drawCat()
+        elseif theme == "cane" then
+            drawDog()
+        elseif theme == "arcobaleno" then
+            drawRainbow()
+        elseif theme == "luna" then
+            drawMoon()
+        elseif theme == "montagna" then
+            drawMountain()
+        elseif theme == "nuvola" then
+            drawCloud()
+        elseif theme == "oceano" then
+            drawOcean()
+        elseif theme == "razzo" then
+            drawRocket()
+        elseif theme == "stella" then
+            drawStar()
+        elseif theme == "farfalla" then
+            drawButterfly()
+        elseif theme == "diamante" then
+            drawDiamond()
+        elseif theme == "sorriso" then
+            drawSmile()
+        elseif theme == "fulmine" then
+            drawLightning()
+        elseif theme == "chiave" then
+            drawKey()
+        elseif theme == "nota" then
+            drawMusicNote()
+        else
+            drawRandom()
+        end
+        
+        isDrawing = false
+        updateStats()
+        
+        -- Animazione completamento
+        animateCompletion()
+    end)
+end
+
+function drawPixel(x, y, z, color, animated)
+    if not canvas then return end
+    
+    local canvasBase = canvas:FindFirstChild("CanvasBase")
+    if not canvasBase then return end
+    
+    color = color or currentColor
+    pixelCount = pixelCount + 1
+    
+    local pixel = Instance.new("Part")
+    pixel.Name = "Pixel_" .. pixelCount
+    pixel.Size = Vector3.new(CONFIG.PIXEL_SIZE, CONFIG.PIXEL_SIZE, CONFIG.PIXEL_SIZE)
+    pixel.CFrame = canvasBase.CFrame * CFrame.new(x, y, z + 0.1)
+    pixel.Anchored = true
+    pixel.CanCollide = false
+    pixel.Material = Enum.Material.Neon
+    pixel.Color = color
+    pixel.Parent = canvas
+    
+    -- Salva nella cronologia
+    table.insert(drawingHistory, pixel)
+    if #drawingHistory > CONFIG.MAX_UNDO_STEPS then
+        table.remove(drawingHistory, 1)
+    end
+    
+    if animated then
+        pixel.Transparency = 1
+        pixel.Size = Vector3.new(0.01, 0.01, 0.01)
+        
+        local tween = TweenService:Create(pixel,
+            TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+            {
+                Size = Vector3.new(CONFIG.PIXEL_SIZE, CONFIG.PIXEL_SIZE, CONFIG.PIXEL_SIZE),
+                Transparency = 0
+            }
+        )
+        tween:Play()
+        
+        -- Effetto particella
+        if math.random() > 0.7 then
+            createParticleEffect(pixel.Position, color)
         end
     end
     
-    -- Esegui il disegno
-    drawOnCanvas(recognizedTheme)
-    inputBox.Text = ""
-end)
+    return pixel
+end
 
--- Attivazione iniziale
-aiHub.Parent = PlayerGui
+function drawLine(x1, y1, x2, y2, color)
+    local dx = math.abs(x2 - x1)
+    local dy = math.abs(y2 - y1)
+    local sx = x1 < x2 and 1 or -1
+    local sy = y1 < y2 and 1 or -1
+    local err = dx - dy
+    
+    while true do
+        drawPixel(x1, y1, 0, color, true)
+        
+        if x1 == x2 and y1 == y2 then break end
+        
+        local e2 = 2 * err
+        if e2 > -dy then
+            err = err - dy
+            x1 = x1 + sx
+        end
+        if e2 < dx then
+            err = err + dx
+            y1 = y1 + sy
+        end
+        
+        wait(0.01)
+    end
+end
+
+function drawCircle(cx, cy, radius, filled, color)
+    if filled then
+        for y = -radius, radius do
+            for x = -radius, radius do
+                if x*x + y*y <= radius*radius then
+                    drawPixel(cx + x, cy + y, 0, color, true)
+                    wait(0.001)
+                end
+            end
+        end
+    else
+        local angle = 0
+        while angle < math.pi * 2 do
+            local x = cx + math.cos(angle) * radius
+            local y = cy + math.sin(angle) * radius
+            drawPixel(x, y, 0, color, true)
+            angle = angle + 0.1
+            wait(0.01)
+        end
+    end
+end
+
+function drawRectangle(x1, y1, x2, y2, filled, color)
+    if filled then
+        for y = math.min(y1, y2), math.max(y1, y2), 0.2 do
+            for x = math.min(x1, x2), math.max(x1, x2), 0.2 do
+                drawPixel(x, y, 0, color, true)
+                wait(0.001)
+            end
+        end
+    else
+        drawLine(x1, y1, x2, y1, color)
+        drawLine(x2, y1, x2, y2, color)
+        drawLine(x2, y2, x1, y2, color)
+        drawLine(x1, y2, x1, y1, color)
+    end
+end
+
+-- DISEGNI SPECIFICI
+function drawSun()
+    local centerX, centerY = 0, 2
+    local radius = 2
+    
+    -- Disco solare
+    drawCircle(centerX, centerY, radius, true, Color3.new(1, 0.9, 0))
+    
+    -- Raggi
+    for angle = 0, math.pi * 2, math.pi / 8 do
+        local x1 = centerX + math.cos(angle) * (radius + 0.5)
+        local y1 = centerY + math.sin(angle) * (radius + 0.5)
+        local x2 = centerX + math.cos(angle) * (radius + 2)
+        local y2 = centerY + math.sin(angle) * (radius + 2)
+        drawLine(x1, y1, x2, y2, Color3.new(1, 0.8, 0))
+    end
+end
+
+function drawHouse()
+    -- Base casa
+    drawRectangle(-3, -3, 3, 0, true, Color3.new(0.8, 0.4, 0.2))
+    
+    -- Tetto
+    drawLine(-4, 0, 0, 3, Color3.new(0.5, 0.2, 0.1))
+    drawLine(0, 3, 4, 0, Color3.new(0.5, 0.2, 0.1))
+    for y = 0, 3, 0.2 do
+        local width = (3 - y) * 1.3
+        drawLine(-width, y, width, y, Color3.new(0.6, 0.3, 0.1))
+    end
+    
+    -- Porta
+    drawRectangle(-0.8, -3, 0.8, -1, true, Color3.new(0.4, 0.2, 0.1))
+    
+    -- Finestre
+    drawRectangle(-2.5, -1.5, -1.5, -0.5, true, Color3.new(0.5, 0.8, 1))
+    drawRectangle(1.5, -1.5, 2.5, -0.5, true, Color3.new(0.5, 0.8, 1))
+    
+    -- Camino
+    drawRectangle(2, 1, 2.5, 2.5, true, Color3.new(0.3, 0.3, 0.3))
+end
+
+function drawHeart()
+    local scale = 0.15
+    for t = 0, math.pi * 2, 0.01 do
+        local x = 16 * math.sin(t)^3
+        local y = 13 * math.cos(t) - 5 * math.cos(2*t) - 2 * math.cos(3*t) - math.cos(4*t)
+        drawPixel(x * scale, -y * scale + 2, 0, Color3.new(1, 0, 0.5), true)
+        wait(0.005)
+    end
+    
+    -- Riempi il cuore
+    for y = -1, 3, 0.2 do
+        for x = -2.5, 2.5, 0.2 do
+            local t = math.atan2(x, y)
+            local heartX = 16 * math.sin(t)^3 * scale
+            local heartY = (13 * math.cos(t) - 5 * math.cos(2*t) - 2 * math.cos(3*t) - math.cos(4*t)) * scale
+            if math.abs(x) < math.abs(heartX) and y < -heartY + 2 then
+                drawPixel(x, y, 0, Color3.new(1, 0.2, 0.4), true)
+            end
+        end
+        wait(0.01)
+    end
+end
+
+function drawTree()
+    -- Tronco
+    drawRectangle(-0.5, -3, 0.5, 0, true, Color3.new(0.4, 0.2, 0.1))
+    
+    -- Chioma a strati
+    for i = 0, 2 do
+        local y = i * 1.5
+        local size = 3 - i * 0.8
+        for angle = 0, math.pi * 2, 0.1 do
+            local x = math.cos(angle) * size
+            local yOffset = math.sin(angle) * size * 0.7
+            drawPixel(x, y + yOffset, 0, Color3.new(0, 0.8 - i * 0.2, 0.2), true)
+            wait(0.001)
+        end
+    end
+end
+
+function drawFlower()
+    -- Gambo
+    drawLine(0, -3, 0, 0, Color3.new(0, 0.8, 0))
+    
+    -- Petali
+    local petalColor = Color3.new(1, 0.4, 0.6)
+    for angle = 0, math.pi * 2, math.pi / 3 do
+        local cx = math.cos(angle) * 1.5
+        local cy = math.sin(angle) * 1.5 + 1
+        drawCircle(cx, cy, 0.8, true, petalColor)
+    end
+    
+    -- Centro
+    drawCircle(0, 1, 0.6, true, Color3.new(1, 0.9, 0))
+end
+
+function drawCat()
+    -- Corpo
+    drawCircle(0, -1, 1.5, true, Color3.new(0.3, 0.3, 0.3))
+    
+    -- Testa
+    drawCircle(0, 1, 1.2, true, Color3.new(0.3, 0.3, 0.3))
+    
+    -- Orecchie
+    drawLine(-0.8, 1.8, -0.5, 2.5, Color3.new(0.3, 0.3, 0.3))
+    drawLine(-0.5, 2.5, -0.2, 1.8, Color3.new(0.3, 0.3, 0.3))
+    drawLine(0.8, 1.8, 0.5, 2.5, Color3.new(0.3, 0.3, 0.3))
+    drawLine(0.5, 2.5, 0.2, 1.8, Color3.new(0.3, 0.3, 0.3))
+    
+    -- Occhi
+    drawPixel(-0.4, 1.2, 0, Color3.new(0, 1, 0), true)
+    drawPixel(0.4, 1.2, 0, Color3.new(0, 1, 0), true)
+    
+    -- Baffi
+    drawLine(-1.5, 0.8, -0.5, 0.8, Color3.new(1, 1, 1))
+    drawLine(1.5, 0.8, 0.5, 0.8, Color3.new(1, 1, 1))
+    
+    -- Coda
+    for i = 0, math.pi, 0.1 do
+        local x = 1.5 + math.cos(i) * 1
+        local y = -1 - math.sin(i) * 1
+        drawPixel(x, y, 0, Color3.new(0.3, 0.3, 0.3), true)
+        wait(0.01)
+    end
+end
+
+function drawRainbow()
+    local colors = {
+        Color3.new(1, 0, 0),      -- Rosso
+        Color3.new(1, 0.5, 0),    -- Arancione
+        Color3.new(1, 1, 0),      -- Giallo
+        Color3.new(0, 1, 0),      -- Verde
+        Color3.new(0, 0.5, 1),    -- Blu
+        Color3.new(0.3, 0, 0.5),  -- Indaco
+        Color3.new(0.5, 0, 1)     -- Viola
+    }
+    
+    for i, color in ipairs(colors) do
+        local radius = 4 - (i - 1) * 0.4
+        for angle = 0, math.pi, 0.05 do
+            local x = math.cos(angle) * radius
+            local y = math.sin(angle) * radius - 2
+            drawPixel(x, y, 0, color, true)
+            wait(0.001)
+        end
+    end
+    
+    -- Nuvole
+    drawCircle(-3.5, -2, 0.8, true, Color3.new(1, 1, 1))
+    drawCircle(3.5, -2, 0.8, true, Color3.new(1, 1, 1))
+end
+
+function drawRocket()
+    -- Corpo principale
+    drawRectangle(-0.8, -2, 0.8, 2, true, Color3.new(0.7, 0.7, 0.7))
+    
+    -- Punta
+    drawLine(-0.8, 2, 0, 3.5, Color3.new(1, 0, 0))
+    drawLine(0, 3.5, 0.8, 2, Color3.new(1, 0, 0))
+    for y = 2, 3.5, 0.1 do
+        local width = (3.5 - y) * 0.5
+        drawLine(-width, y, width, y, Color3.new(1, 0, 0))
+    end
+    
+    -- Alette
+    drawLine(-0.8, -2, -1.5, -3, Color3.new(0.8, 0.2, 0.2))
+    drawLine(-1.5, -3, -0.8, -3, Color3.new(0.8, 0.2, 0.2))
+    drawLine(0.8, -2, 1.5, -3, Color3.new(0.8, 0.2, 0.2))
+    drawLine(1.5, -3, 0.8, -3, Color3.new(0.8, 0.2, 0.2))
+    
+    -- Fiamma
+    for i = 1, 10 do
+        local y = -3 - i * 0.2
+        local size = math.random(3, 8) / 10
+        local x = (math.random() - 0.5) * size
+        local color = i < 5 and Color3.new(1, 0.5, 0) or Color3.new(1, 0.8, 0)
+        drawPixel(x, y, 0, color, true)
+        wait(0.01)
+    end
+end
+
+function drawDiamond()
+    -- Parte superiore
+    for y = 0, 2, 0.2 do
+        local width = y * 0.8
+        drawLine(-width, y, width, y, Color3.new(0.5, 0.8, 1))
+        wait(0.01)
+    end
+    
+    -- Parte inferiore
+    for y = 0, -3, -0.2 do
+        local width = -y * 0.5
+        drawLine(-width, y, width, y, Color3.new(0.5, 0.8, 1))
+        wait(0.01)
+    end
+    
+    -- Riflessi
+    drawLine(-0.5, 1.5, 0.5, 1.5, Color3.new(1, 1, 1))
+    drawPixel(0, 1, 0, Color3.new(1, 1, 1), true)
+end
+
+function drawLightning()
+    local points = {
+        {0, 4},
+        {-1, 2},
+        {0.5, 1},
+        {-0.5, -1},
+        {1, -2},
+        {0, -4}
+    }
+    
+    for i = 1, #points - 1 do
+        drawLine(points[i][1], points[i][2], points[i+1][1], points[i+1][2], Color3.new(1, 1, 0))
+        wait(0.1)
+    end
+    
+    -- Effetto glow
+    for i = 1, #points do
+        createParticleEffect(
+            canvas.CanvasBase.Position + Vector3.new(points[i][1], points[i][2], 0.2),
+            Color3.new(1, 1, 0.5)
+        )
+    end
+end
+
+-- Aggiungi altri disegni...
+
+function drawRandom()
+    -- Disegno pattern casuale
+    for i = 1, 50 do
+        local x = math.random(-5, 5)
+        local y = math.random(-3, 3)
+        local color = Color3.fromHSV(math.random(), 1, 1)
+        drawPixel(x, y, 0, color, true)
+        wait(0.02)
+    end
+end
+
+-- FUNZIONI UTILITY
+function clearCanvas()
+    if not canvas then return end
+    
+    for _, child in ipairs(canvas:GetChildren()) do
+        if child:IsA("BasePart") and child.Name:match("Pixel") then
+            child:Destroy()
+        end
+    end
+    
+    pixelCount = 0
+    drawingHistory = {}
+    updateStats()
+end
+
+function updateStats()
+    local statsLabel = mainFrame:FindFirstDescendant("StatsLabel")
+    if statsLabel then
+        local elapsed = isDrawing and math.floor(tick() - startTime) or 0
+        statsLabel.Text = string.format(
+            "📊 Statistiche:\n• Pixel: %d\n• Tempo: %ds\n• Tema: %s",
+            pixelCount,
+            elapsed,
+            currentTheme:gsub("^%l", string.upper)
+        )
+    end
+end
+
+function updateColorIndicator()
+    -- Aggiorna indicatore colore corrente
+    -- (da implementare se vuoi un indicatore visivo)
+end
+
+function animateText(label, text)
+    local originalText = label.Text
+    label.Text = text
+    
+    local tween = TweenService:Create(label,
+        TweenInfo.new(0.3, Enum.EasingStyle.Quad),
+        {TextTransparency = 1}
+    )
+    tween:Play()
+    
+    tween.Completed:Connect(function()
+        label.Text = originalText
+        TweenService:Create(label,
+            TweenInfo.new(0.3),
+            {TextTransparency = 0}
+        ):Play()
+    end)
+end
+
+function animateCompletion()
+    -- Animazione di completamento
+    if canvas and canvas:FindFirstChild("CanvasBase") then
+        local canvasBase = canvas.CanvasBase
+        
+        -- Effetto pulse
+        local pulseTween = TweenService:Create(canvasBase,
+            TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 2, true),
+            {Size = canvasBase.Size * 1.05}
+        )
+        pulseTween:Play()
+        
+        -- Fuochi d'artificio
+        for i = 1, 5 do
+            local pos = canvasBase.Position + Vector3.new(
+                math.random(-5, 5),
+                math.random(0, 5),
+                2
+            )
+            for j = 1, 10 do
+                createParticleEffect(pos, Color3.fromHSV(math.random(), 1, 1))
+            end
+            wait(0.2)
+        end
+    end
+end
+
+function undoLastAction()
+    if #drawingHistory > 0 then
+        local lastPixel = table.remove(drawingHistory)
+        if lastPixel and lastPixel.Parent then
+            lastPixel:Destroy()
+            pixelCount = math.max(0, pixelCount - 1)
+            updateStats()
+        end
+    end
+end
+
+function saveDrawing()
+    -- Simula salvataggio (in un vero gioco potresti salvare in DataStore)
+    local saveData = {
+        theme = currentTheme,
+        pixelCount = pixelCount,
+        timestamp = os.time()
+    }
+    
+    print("Disegno salvato:", HttpService:JSONEncode(saveData))
+    animateText(mainFrame:FindFirstDescendant("Prompt"), "✅ Disegno salvato!")
+end
+
+function animateCanvas()
+    if not canvas then return end
+    
+    -- Anima tutti i pixel
+    for _, child in ipairs(canvas:GetChildren()) do
+        if child:IsA("BasePart") and child.Name:match("Pixel") then
+            spawn(function()
+                local originalPos = child.Position
+                local tween = TweenService:Create(child,
+                    TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 2, true),
+                    {
+                        Position = originalPos + Vector3.new(0, math.random() * 0.5, 0),
+                        Color = Color3.fromHSV((tick() + math.random()) % 1, 1, 1)
+                    }
+                )
+                tween:Play()
+            end)
+        end
+    end
+end
+
+-- INIZIALIZZAZIONE
+createCanvas()
+createGUI()
+
+print("🎨 AI Drawing Hub Ultimate caricato con successo!")
